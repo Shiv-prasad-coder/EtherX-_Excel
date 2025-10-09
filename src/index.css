@@ -1,0 +1,73 @@
+
+html, body, #root {
+  height: 100%;
+  overflow: hidden; /* stop window scrolling */
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes popIn {
+  0% { transform: scale(0.9); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+
+body.dark {
+  background-color: #0f172a;
+  color: #f8fafc;
+  transition: all 0.25s ease-in-out;
+}
+
+body.light {
+  background-color: #f8fafc;
+  color: #0f172a;
+  transition: all 0.25s ease-in-out;
+}
+/* THEME VARIABLES */
+:root {
+  --app-bg: #ffffff;
+  --toolbar-bg: #ffffff;
+  --toolbar-text: #0f172a;
+
+  --grid-bg: #ffffff;
+  --header-bg: #fafafa;
+  --text: #0f172a;
+
+  --border: #e3e3e3;
+  --header-border: #dddddd;
+
+  --select: #eaf2ff;   /* active cell */
+  --range:  #dbeafe;   /* dragged selection */
+  --handle: #3b82f6;
+  --outline: #3b82f6;
+}
+
+/* Real dark mode */
+.dark {
+  --app-bg: #0b1220;           /* page chrome */
+  --toolbar-bg: #0f1629;       /* toolbar container */
+  --toolbar-text: #e5e7eb;
+
+  --grid-bg: #0f1629;          /* sheet background */
+  --header-bg: #0e1423;        /* A,B,C… row/col headers */
+  --text: #e5e7eb;
+
+  --border: #20304a;           /* cell grid lines */
+  --header-border: #223351;
+
+  --select: #1e3a8a33;         /* active cell fill */
+  --range:  #1e3a8a22;
+  --handle: #60a5fa;
+  --outline: #60a5fa;
+}
+
+/* Small helpers (you already have toolbar classes) */
+body { background: var(--app-bg); color: var(--text); }
+.toolbar-chip, .toolbar-btn, .toolbar-input { color: var(--toolbar-text); }
