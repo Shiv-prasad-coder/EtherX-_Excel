@@ -15,14 +15,7 @@ const btnBase: React.CSSProperties = {
 
   
 
-// Simple color helper
-const themeColors = (theme: "light" | "dark") => ({
-  bg: theme === "dark" ? "#0f172a" : "#ffffff",
-  gridBg: theme === "dark" ? "#1e293b" : "#fafafa",
-  border: theme === "dark" ? "#334155" : "#e3e3e3",
-  text: theme === "dark" ? "#e2e8f0" : "#0f172a",
-  headerBg: theme === "dark" ? "#1e293b" : "#fafafa",
-});
+
 function getPalette(theme?: "light" | "dark") {
   const dark = theme === "dark";
   return {
@@ -43,7 +36,6 @@ function getPalette(theme?: "light" | "dark") {
 
 
 /** Layout constants */
-const ROW_HEADER_WIDTH = 50;
 const COL_WIDTH = 100;
 const ROW_HEIGHT = 28;
 const COL_HEADER_HEIGHT = 28;
@@ -909,27 +901,7 @@ const commitEdit = useCallback((id: string, raw: string) => {
     document.addEventListener("mouseup", onUp);
     startEvt.preventDefault();
   }
-  // Evaluate user-set conditional rules for a given cell value
-const evalUserCondBg = useCallback(
-  (value: any): string | undefined => {
-    if (!condEnabled || !rules || !rules.length) return undefined;
-    for (const rule of rules) {
-      const cond = rule.condition;
-      const val = rule.value;
-      const color = rule.color || "#fff7cc";
-      const n = Number(value);
-      const nv = Number(val);
-
-      if (cond === "greater" && !Number.isNaN(n) && !Number.isNaN(nv) && n > nv) return color;
-      if (cond === "less" && !Number.isNaN(n) && !Number.isNaN(nv) && n < nv) return color;
-      if (cond === "equal" && String(value) === String(val)) return color;
-      if (cond === "contains" && String(value).toLowerCase().includes(String(val).toLowerCase())) return color;
-    }
-    return undefined;
-  },
-  [rules, condEnabled]
-);
-
+ 
   
   function completeFill() {
     if (!fillDraggingRef.current) return;
@@ -990,14 +962,11 @@ const cellBase: React.CSSProperties = {
    ? pal.selectionFill
    : (isSelected ? pal.selectionFill : pal.surface);
     const display = cells[id]?.value ?? "";
-    const rawInput = cells[id]?.raw ?? "";
+    
 
     // LEFT sticky only (freeze first column)
     const isLeftSticky = freezeFirstCol && c === 0;
-     const stickyStyles: React.CSSProperties = isLeftSticky
-   ? { position: "sticky", left: 0, zIndex: 7, background: pal.surface, boxShadow: `inset -1px 0 ${pal.border}` }
-    : {};
-    
+     
 
     // formatting for this cell
     const fmt = formats[id] || {};
