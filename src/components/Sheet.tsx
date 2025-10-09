@@ -2,16 +2,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { evaluateAndUpdate, setCellRaw } from "../utils/formulaEngine";
 import type { CellValue } from "../utils/formulaEngine";
-// Basic reusable button style (copied from App.tsx)
-const btnBase: React.CSSProperties = {
-  padding: "6px 10px",
-  borderRadius: 6,
-  cursor: "pointer",
-  border: "1px solid #d1d5db",
-  background: "#ffffff",
-  color: "#0f172a",
-  transition: "all 0.2s ease",
-};
 
   
 
@@ -124,6 +114,9 @@ const pal = useMemo(() => getPalette(theme), [theme]);
   const [editing, setEditing] = useState<string | null>(null);
   const [formulaBar, setFormulaBar] = useState("");
   const selectedRef = useRef<string | null>(null);
+  // inside the Sheet() component, with your other useState hooks:
+const [ribbonTab, setRibbonTab] = useState<"home" | "insert" | "view">("home");
+
 
   /** Dynamic sheet size (start from props) */
   const [rowCount, setRowCount] = useState(rows);
@@ -1228,387 +1221,296 @@ const currentFmt =
       overflow: "hidden",
     }}
   >
-{/* Top bar */}
+{/* Ribbon (sticky header) */}
 <div
-  
+  className="sticky top-0 z-20 border-b backdrop-blur"
   style={{
     background: pal.surfaceAlt,
     color: pal.text,
     borderColor: pal.border
   }}
-  className="sticky top-0 z-20 border-b backdrop-blur px-3 py-2"
 >
-
-  <div 
-  style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-  className="flex flex-wrap items-center gap-2">
-
-    {/* A) Name chip + Formula bar */}
-    <span 
-    style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-    className="toolbar-chip">
-      {`${sheetName}${selectedRef.current ? ` • ${selectedRef.current}` : ""}`}
-    </span>
-
-    <input
-    style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-      className="toolbar-input flex-1 min-w-[260px]"
-      value={formulaBar}
-      onChange={(e) => setFormulaBar(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" && selectedRef.current) {
-          commitEdit(selectedRef.current, formulaBar);
-        }
-      }}
-      placeholder="Type value or =formula"
-    />
-
-    {/* B) Import / Export / Clear */}
-    <div className="flex items-center gap-2">
-      <button
-      style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-        className="toolbar-btn"
-        onClick={() => {
-          const input = document.createElement("input");
-          input.type = "file"; input.accept = ".csv,text/csv";
-          input.onchange = async () => {
-            const f = input.files?.[0]; if (!f) return;
-            importCSV(await f.text());
-          };
-          input.click();
-        }}
-      >
-        Import CSV
-      </button>
-
-      <button
-      style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-        className="toolbar-btn"
-        onClick={() => {
-          const csv = cellsToCSV();
-          const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g, "-");
-          downloadCSV(`sheet-${ts}.csv`, csv);
-        }}
-      >
-        Download CSV
-      </button>
-
-      <button
-      style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-      className="toolbar-btn"
-              onClick={clearSheet}>
-        Clear Sheet
-      </button>
+  {/* Tabs row */}
+  <div
+    className="flex items-center justify-between px-3 py-2"
+    style={{ borderBottom: `1px solid ${pal.border}` }}
+  >
+    <div className="flex items-center gap-6">
+      {(["home", "insert", "view"] as const).map((t) => {
+        const active = ribbonTab === t;
+        const label = t === "home" ? "Home" : t[0].toUpperCase() + t.slice(1);
+        return (
+          <button
+            key={t}
+            onClick={() => setRibbonTab(t)}
+            style={{
+              padding: "8px 14px",
+              borderRadius: 999,
+              border: `1px solid ${active ? pal.selection : pal.border}`,
+              background: active ? pal.selection : pal.surface,
+              color: active ? "#fff" : pal.text,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            {label}
+          </button>
+        );
+      })}
     </div>
 
-    <span className="toolbar-sep" />
-
-    {/* C) Freeze + Insert/Delete */}
-    <div className="flex items-center gap-2">
-      <button
-      style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-      className={`toolbar-btn ${freezeTopRow ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300" : ""}`}
-              onClick={() => { pushHistory(); setFreezeTopRow(v => !v); }}>
-        {freezeTopRow ? "Unfreeze Top Row" : "Freeze Top Row"}
-      </button>
-      
-     <button
-  onClick={() => setShowCondModal(true)}
-  style={{
-    ...btnBase,
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`,
-  }}
->
-  Conditional Format
-</button>
-      <button 
-      style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-      className={`toolbar-btn ${freezeFirstCol ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300" : ""}`}
-              onClick={() => { pushHistory(); setFreezeFirstCol(v => !v); }}>
-        {freezeFirstCol ? "Unfreeze First Column" : "Freeze First Column"}
-      </button>
-
-      <button 
-      style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-      className="toolbar-btn" title="+ Row"
-              onClick={() => { const p = anchorRC(); if (!p) return; insertRowAt(p.row); }}>
-        + Row
-      </button>
-      <button 
-      style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-      className="toolbar-btn bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300" title="− Row"
-              onClick={() => { const p = anchorRC(); if (!p) return; deleteRowAt(p.row); }}>
-        − Row
-      </button>
-
-      <button
-      style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-      className="toolbar-btn" title="+ Col"
-              onClick={() => { const p = anchorRC(); if (!p) return; insertColAt(p.col); }}>
-        + Col
-      </button>
-      <button 
-      style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-      className="toolbar-btn bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300" title="− Col"
-              onClick={() => { const p = anchorRC(); if (!p) return; deleteColAt(p.col); }}>
-        − Col
-      </button>
-    </div>
-
-    <span className="toolbar-sep" />
-
-    {/* D) Text formatting */}
-    <div className="flex items-center gap-2">
-      <button 
-      style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-      className="toolbar-btn" title="Bold" onClick={toggleBold}>B</button>
-      <button 
-      style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-      className="toolbar-btn" title="Italic" onClick={toggleItalic}><i>I</i></button>
-
-      <button 
-      style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-      className="toolbar-btn" title="Align Left"   onClick={() => setAlign("left")}>⟸</button>
-      <button 
-      style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-      className="toolbar-btn" title="Align Center" onClick={() => setAlign("center")}>≡</button>
-      <button 
-      style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-      className="toolbar-btn" title="Align Right"  onClick={() => setAlign("right")}>⟹</button>
-
-      <label className="text-xs flex items-center gap-1.5">
-        <span>Fill</span>
-        <input type="color" className="h-8 w-10 rounded-md border border-slate-300 dark:border-slate-700"
-               onChange={(e) => setBg(e.target.value)} />
-      </label>
-
-      <label className="text-xs flex items-center gap-1.5">
-        <span>Text</span>
-        <input type="color" className="h-8 w-10 rounded-md border border-slate-300 dark:border-slate-700"
-               onChange={(e) => setColor(e.target.value)} />
-      </label>
-    </div>
-
-    <span className="toolbar-sep" />
-
-    {/* E) Number format + conditional */}
-    <div className="flex items-center gap-2">
-      <select
-      style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-        title="Number Format"
-        className="toolbar-input"
-        value={currentFmt /* if you track; else remove value and use defaultValue */}
-        onChange={(e) => setNumFmt(e.target.value as NumFmt)}
-      >
-        <option value="general">General</option>
-        <option value="number">Number</option>
-        <option value="currency">Currency</option>
-        <option value="percent">Percent</option>
-        <option value="date">Date</option>
-      </select>
-
-      <button 
-      
-      style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}className="toolbar-btn" title="Increase Decimals" onClick={() => incDecimals(1)}>+.0</button>
-      <button 
-      style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-      className="toolbar-btn" title="Decrease Decimals" onClick={() => incDecimals(-1)}>-.0</button>
-
-      <input
-      style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-        className="toolbar-input w-14"
-        title="Currency Symbol"
-        placeholder="₹ $ €"
-        onChange={(e) => setCurrencySymbol(e.target.value.trim())}
-      />
-
-      
-    </div>
-
-    <span className="toolbar-sep" />
-
-    {/* F) Find / Replace */}
-    <div 
-    style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-    className="flex items-center gap-2">
-      <input
-      style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-        className="toolbar-input w-40"
-        value={findText}
-        onChange={(e) => setFindText(e.target.value)}
-        onKeyDown={(e) => e.stopPropagation()}
-        placeholder="Find…"
-      />
-      <input
-      style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-        className="toolbar-input w-40"
-        value={replaceText}
-        onChange={(e) => setReplaceText(e.target.value)}
-        onKeyDown={(e) => e.stopPropagation()}
-        placeholder="Replace…"
-      />
-
-      <label
-      style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-      className="text-xs flex items-center gap-2 px-2 py-1">
-        <input type="checkbox" checked={matchCase} onChange={(e) => setMatchCase(e.target.checked)} />
-        Match case
-      </label>
-
-      <button
-      style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-      className="toolbar-btn" onClick={prevHit} title="Previous">Prev</button>
-      <button 
-      style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-      className="toolbar-btn" onClick={nextHit} title="Next">Next</button>
-      <button 
-      style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-      className="toolbar-btn bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
-              onClick={replaceCurrent} title="Replace current">
-        Replace
-      </button>
-      <button 
-      style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-      className="toolbar-btn bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
-              onClick={replaceAll} title="Replace all">
-        Replace All
-      </button>
-      <button 
-      style={{
-    background: pal.surface,
-    color: pal.text,
-    border: `1px solid ${pal.border}`
-  }}
-      className="toolbar-btn bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300"
-              onClick={clearFind} title="Clear search">
-        Clear
-      </button>
-
-      <span className="text-xs text-slate-500 dark:text-slate-400 min-w-[70px] text-center">
-        {findHits.length ? `${hitIndex + 1}/${findHits.length}` : "0 results"}
-      </span>
-    </div>
-
+    {/* Theme + (you can add extra quick actions here if you want) */}
+    <div className="flex items-center gap-2" />
   </div>
+
+  {/* HOME TAB CONTENT — this is your existing toolbar, unchanged in logic */}
+  {ribbonTab === "home" ? (
+    <div
+      className="px-3 py-2"
+      style={{
+        background: pal.surfaceAlt,
+        color: pal.text,
+        borderColor: pal.border
+      }}
+    >
+      <div
+        className="flex flex-wrap items-center gap-2"
+        style={{
+          background: pal.surface,
+          color: pal.text,
+          border: `1px solid ${pal.border}`,
+          borderRadius: 8,
+          padding: 8,
+        }}
+      >
+        {/* A) Name chip + Formula bar (unchanged) */}
+        <span
+          className="toolbar-chip"
+          style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+        >
+          {`${sheetName}${selectedRef.current ? ` • ${selectedRef.current}` : ""}`}
+        </span>
+
+        <input
+          className="toolbar-input flex-1 min-w-[260px]"
+          style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+          value={formulaBar}
+          onChange={(e) => setFormulaBar(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && selectedRef.current) {
+              commitEdit(selectedRef.current, formulaBar);
+            }
+          }}
+          placeholder="Type value or =formula"
+        />
+
+        {/* B) Import / Export / Clear (unchanged) */}
+        <div className="flex items-center gap-2">
+          <button
+            className="toolbar-btn"
+            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+            onClick={() => {
+              const input = document.createElement("input");
+              input.type = "file"; input.accept = ".csv,text/csv";
+              input.onchange = async () => {
+                const f = input.files?.[0]; if (!f) return;
+                importCSV(await f.text());
+              };
+              input.click();
+            }}
+          >
+            Import CSV
+          </button>
+
+          <button
+            className="toolbar-btn"
+            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+            onClick={() => {
+              const csv = cellsToCSV();
+              const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g, "-");
+              downloadCSV(`sheet-${ts}.csv`, csv);
+            }}
+          >
+            Download CSV
+          </button>
+
+          <button
+            className="toolbar-btn"
+            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+            onClick={clearSheet}
+          >
+            Clear Sheet
+          </button>
+        </div>
+
+        <span className="toolbar-sep" />
+
+        {/* C) Freeze + Insert/Delete + Conditional Format (unchanged) */}
+        <div className="flex items-center gap-2">
+          <button
+            className={`toolbar-btn ${freezeTopRow ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300" : ""}`}
+            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+            onClick={() => { pushHistory(); setFreezeTopRow(v => !v); }}
+          >
+            {freezeTopRow ? "Unfreeze Top Row" : "Freeze Top Row"}
+          </button>
+
+          <button
+            onClick={() => setShowCondModal(true)}
+            style={{
+              padding: "6px 10px",
+              borderRadius: 6,
+              cursor: "pointer",
+              border: `1px solid ${pal.border}`,
+              background: pal.surface,
+              color: pal.text,
+            }}
+          >
+            Conditional Format
+          </button>
+
+          <button
+            className={`toolbar-btn ${freezeFirstCol ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300" : ""}`}
+            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+            onClick={() => { pushHistory(); setFreezeFirstCol(v => !v); }}
+          >
+            {freezeFirstCol ? "Unfreeze First Column" : "Freeze First Column"}
+          </button>
+
+          <button
+            className="toolbar-btn"
+            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+            title="+ Row"
+            onClick={() => { const p = anchorRC(); if (!p) return; insertRowAt(p.row); }}
+          >
+            + Row
+          </button>
+
+          <button
+            className="toolbar-btn bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300"
+            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+            title="− Row"
+            onClick={() => { const p = anchorRC(); if (!p) return; deleteRowAt(p.row); }}
+          >
+            − Row
+          </button>
+
+          <button
+            className="toolbar-btn"
+            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+            title="+ Col"
+            onClick={() => { const p = anchorRC(); if (!p) return; insertColAt(p.col); }}
+          >
+            + Col
+          </button>
+
+          <button
+            className="toolbar-btn bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300"
+            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+            title="− Col"
+            onClick={() => { const p = anchorRC(); if (!p) return; deleteColAt(p.col); }}
+          >
+            − Col
+          </button>
+        </div>
+
+        <span className="toolbar-sep" />
+
+        {/* D) Text formatting (unchanged) */}
+        <div className="flex items-center gap-2">
+          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} title="Bold" onClick={toggleBold}>B</button>
+          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} title="Italic" onClick={toggleItalic}><i>I</i></button>
+          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} title="Align Left"   onClick={() => setAlign("left")}>⟸</button>
+          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} title="Align Center" onClick={() => setAlign("center")}>≡</button>
+          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} title="Align Right"  onClick={() => setAlign("right")}>⟹</button>
+
+          <label className="text-xs flex items-center gap-1.5">
+            <span>Fill</span>
+            <input type="color" className="h-8 w-10 rounded-md border border-slate-300 dark:border-slate-700"
+              onChange={(e) => setBg(e.target.value)} />
+          </label>
+
+          <label className="text-xs flex items-center gap-1.5">
+            <span>Text</span>
+            <input type="color" className="h-8 w-10 rounded-md border border-slate-300 dark:border-slate-700"
+              onChange={(e) => setColor(e.target.value)} />
+          </label>
+        </div>
+
+        <span className="toolbar-sep" />
+
+        {/* E) Number format (General/Number/Currency/Percent/Date) (unchanged) */}
+        <div className="flex items-center gap-2">
+          <select
+            title="Number Format"
+            className="toolbar-input"
+            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+            value={currentFmt}
+            onChange={(e) => setNumFmt(e.target.value as any)}
+          >
+            <option value="general">General</option>
+            <option value="number">Number</option>
+            <option value="currency">Currency</option>
+            <option value="percent">Percent</option>
+            <option value="date">Date</option>
+          </select>
+
+          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} title="Increase Decimals" onClick={() => incDecimals(1)}>+.0</button>
+          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} title="Decrease Decimals" onClick={() => incDecimals(-1)}>-.0</button>
+
+          <input
+            className="toolbar-input w-14"
+            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+            title="Currency Symbol"
+            placeholder="₹ $ €"
+            onChange={(e) => setCurrencySymbol(e.target.value.trim())}
+          />
+        </div>
+
+        <span className="toolbar-sep" />
+
+        {/* F) Find / Replace (unchanged) */}
+        <div className="flex items-center gap-2" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}`, padding: 4, borderRadius: 6 }}>
+          <input
+            className="toolbar-input w-40"
+            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+            value={findText}
+            onChange={(e) => setFindText(e.target.value)}
+            onKeyDown={(e) => e.stopPropagation()}
+            placeholder="Find…"
+          />
+          <input
+            className="toolbar-input w-40"
+            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+            value={replaceText}
+            onChange={(e) => setReplaceText(e.target.value)}
+            onKeyDown={(e) => e.stopPropagation()}
+            placeholder="Replace…"
+          />
+          <label className="text-xs flex items-center gap-2 px-2 py-1">
+            <input type="checkbox" checked={matchCase} onChange={(e) => setMatchCase(e.target.checked)} />
+            Match case
+          </label>
+          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} onClick={prevHit} title="Previous">Prev</button>
+          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} onClick={nextHit} title="Next">Next</button>
+          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} onClick={replaceCurrent} title="Replace current">Replace</button>
+          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} onClick={replaceAll} title="Replace all">Replace All</button>
+          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} onClick={clearFind} title="Clear search">Clear</button>
+          <span className="text-xs" style={{ color: pal.text }}>
+            {findHits.length ? `${hitIndex + 1}/${findHits.length}` : "0 results"}
+          </span>
+        </div>
+      </div>
+    </div>
+  ) : (
+    /* Non-Home tabs: simple placeholder without changing logic */
+    <div className="px-3 py-3" style={{ background: pal.surfaceAlt, color: pal.text }}>
+      {ribbonTab === "insert" && "Insert tab (coming soon)"}
+      {ribbonTab === "view" && "View tab (coming soon)"}
+    </div>
+  )}
 </div>
+
 
 
 
