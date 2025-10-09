@@ -1,7 +1,7 @@
 import  { useEffect, useState } from "react";
 import exLogo from "../assets/ex_logo.png";     // Big EX logo
-import logoDark from "../assets/logo_Dark.png"; // Small logo for dark mode
-import logoLight from "../assets/logo_Light.png"; // Small logo for light mode (⚡ add this image)
+import logoDark from "../assets/logo_dark.png"; // Small logo for dark mode
+import logoLight from "../assets/logo_light.png"; // Small logo for light mode (⚡ add this image)
 
 interface SplashScreenProps {
   theme: "light" | "dark";
