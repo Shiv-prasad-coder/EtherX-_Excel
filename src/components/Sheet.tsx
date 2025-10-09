@@ -480,36 +480,57 @@ const commitEdit = useCallback((id: string, raw: string) => {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(effectiveKey);
-      if (raw) {
-        const saved: {
-          cells: Record<string, CellValue>;
-          selected?: string;
-          colWidths?: number[];
-          freezeTopRow?: boolean;
-          freezeFirstCol?: boolean;
-          formats?: Record<string, CellFmt>;
-          rowCount?: number;
-          colCount?: number;
-          condEnabled?: boolean;
-        } = JSON.parse(raw);
+    // inside useEffect(() => { ... }, [effectiveKey])
+if (raw) {
+  const saved = JSON.parse(raw) as {
+    cells: Record<string, CellValue>;
+    selected?: string;
+    colWidths?: number[];
+    freezeTopRow?: boolean;
+    freezeFirstCol?: boolean;
+    formats?: Record<string, CellFmt>;
+    rowCount?: number;
+    colCount?: number;
+    condEnabled?: boolean;
+  };
 
-        if (saved.cells) setCells(saved.cells);
-        if (saved.colWidths && saved.colWidths.length) setColWidths(saved.colWidths);
-        if (typeof saved.freezeTopRow === "boolean") setFreezeTopRow(saved.freezeTopRow);
-        if (typeof saved.freezeFirstCol === "boolean") setFreezeFirstCol(saved.freezeFirstCol);
-        if (saved.formats) setFormats(saved.formats);
-        if (typeof saved.rowCount === "number") setRowCount(saved.rowCount);
-        if (typeof saved.colCount === "number") setColCount(saved.colCount);
-        if (typeof saved.condEnabled === "boolean") setCondEnabled(saved.condEnabled);
+  // 🔧 NEW: hydrate values and evaluate formulas once
+  const nextCells: Record<string, CellValue> = { ...(saved.cells || {}) };
+  for (const [id, cell] of Object.entries(nextCells)) {
+    if (!cell) continue;
+    const raw = cell.raw ?? "";
 
-        selectedRef.current = saved.selected ?? "A1";
-        const id = selectedRef.current;
-        setFormulaBar(saved.cells?.[id]?.raw ?? (saved.cells?.[id]?.value?.toString() ?? ""));
-        setRange({ r1: 0, c1: 0, r2: 0, c2: 0 });
-      } else {
-        selectedRef.current = "A1";
-        setRange({ r1: 0, c1: 0, r2: 0, c2: 0 });
+    if (typeof raw === "string" && raw.startsWith("=")) {
+      // let the formula engine compute .value
+      evaluateAndUpdate(nextCells, id);
+    } else {
+      // plain literal: make sure .value is present so the grid can render it
+      if (typeof cell.value === "undefined") {
+        nextCells[id] = { ...cell, value: raw };
       }
+    }
+  }
+
+  setCells(nextCells);
+  if (saved.colWidths?.length) setColWidths(saved.colWidths);
+  if (typeof saved.freezeTopRow === "boolean") setFreezeTopRow(saved.freezeTopRow);
+  if (typeof saved.freezeFirstCol === "boolean") setFreezeFirstCol(saved.freezeFirstCol);
+  if (saved.formats) setFormats(saved.formats);
+  if (typeof saved.rowCount === "number") setRowCount(saved.rowCount);
+  if (typeof saved.colCount === "number") setColCount(saved.colCount);
+  if (typeof saved.condEnabled === "boolean") setCondEnabled(saved.condEnabled);
+
+  selectedRef.current = saved.selected ?? "A1";
+  const id = selectedRef.current;
+  setFormulaBar(
+    nextCells[id]?.raw ?? (nextCells[id]?.value?.toString() ?? "")
+  );
+  setRange({ r1: 0, c1: 0, r2: 0, c2: 0 });
+} else {
+  selectedRef.current = "A1";
+  setRange({ r1: 0, c1: 0, r2: 0, c2: 0 });
+}
+
     } catch {
       selectedRef.current = "A1";
       setRange({ r1: 0, c1: 0, r2: 0, c2: 0 });

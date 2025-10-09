@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+// src/components/Dashboard.tsx
+import React, { useState, useMemo } from "react";
 import logoLight from "../assets/logo_light.png";
 import logoDark from "../assets/logo_dark.png";
 
@@ -10,6 +11,20 @@ type SheetMeta = {
   storageKey: string;
 };
 
+type CellData = {
+  value?: any;
+  raw?: string;      // formulas go in raw ("=SUM(...)")
+  bold?: boolean;
+  formula?: string;  // optional (Sheet mainly reads `raw`)
+};
+
+type TemplateDef = {
+  name: string;
+  rows?: number;
+  cols?: number;
+  cells: Record<string, CellData>;
+};
+
 type Props = {
   theme: "light" | "dark";
   user: { name: string; email: string };
@@ -18,7 +33,10 @@ type Props = {
   onCreateSheet: () => void;
   onLogout: () => void;
   onToggleTheme: () => void;
+  onCreateFromTemplate: (tmpl: TemplateDef) => void; // provided by App
 };
+// Make A1 keys from 2D array; store each as raw string
+
 
 export default function Dashboard({
   theme,
@@ -28,6 +46,7 @@ export default function Dashboard({
   onCreateSheet,
   onLogout,
   onToggleTheme,
+  onCreateFromTemplate,
 }: Props) {
   const dark = theme === "dark";
 
@@ -43,21 +62,29 @@ export default function Dashboard({
     accentText: "#ffffff",
   };
 
-  // ---------------- Templates (no app logic changes) ----------------
-  const [showTemplates, setShowTemplates] = useState(false);
 
-  // Templates are defined as simple 2D arrays (rows of strings).
-  // We’ll offer “Copy to clipboard (TSV)” and “Download CSV”.
-  const templates: {
+  // ===== Template gallery state =====
+  const [showTemplates, setShowTemplates] = useState(false);
+  const categories = ["All", "Budget", "Personal", "School", "Business"] as const;
+  type Category = typeof categories[number];
+  const [activeCat, setActiveCat] = useState<Category>("All");
+
+  // ===== Template data (with categories) =====
+  type TemplateMatrix = {
     key: string;
     name: string;
     description: string;
+    category: Category;
     data: string[][];
-  }[] = [
+  };
+
+  const templates: TemplateMatrix[] = [
+    // ==== Budget ====
     {
-      key: "budget",
+      key: "budget-monthly",
       name: "Monthly Budget",
       description: "Plan vs Actual with difference + totals",
+      category: "Budget",
       data: [
         ["Category", "Planned", "Actual", "Difference"],
         ["Rent", "1200", "1200", "=C2-B2"],
@@ -68,42 +95,140 @@ export default function Dashboard({
       ],
     },
     {
-      key: "tasks",
-      name: "Task Tracker",
-      description: "Simple task/assignee/priority/status view",
+      key: "budget-daily",
+      name: "Daily Expenses",
+      description: "Track daily spend by category",
+      category: "Budget",
       data: [
-        ["Task", "Assignee", "Priority", "Status", "Due"],
-        ["Landing page copy", "Alex", "High", "In Progress", "2025-10-20"],
-        ["Email welcome series", "Sam", "Medium", "Todo", "2025-10-25"],
+        ["Date", "Category", "Description", "Amount"],
+        ["2025-10-01", "Food", "Lunch", "8.50"],
+        ["2025-10-01", "Transport", "Cab", "12.00"],
+      ],
+    },
+    // ==== Personal ====
+    {
+      key: "personal-habits",
+      name: "Habit Tracker",
+      description: "Simple monthly habit grid",
+      category: "Personal",
+      data: [
+        ["Habit", "1", "2", "3", "4", "5", "6", "7"],
+        ["Workout", "", "", "", "", "", "", ""],
+        ["Read", "", "", "", "", "", "", ""],
       ],
     },
     {
-      key: "gradebook",
+      key: "personal-fitness",
+      name: "Workout Log",
+      description: "Exercise / sets / reps / weight",
+      category: "Personal",
+      data: [
+        ["Date", "Exercise", "Sets", "Reps", "Weight"],
+        ["2025-10-01", "Bench Press", "4", "8", "60"],
+        ["2025-10-03", "Squat", "4", "6", "80"],
+      ],
+    },
+    // ==== School ====
+    {
+      key: "school-gradebook",
       name: "Gradebook",
       description: "Average computed from three assessments",
+      category: "School",
       data: [
         ["Student", "Quiz 1", "Quiz 2", "Project", "Average"],
         ["Priya", "86", "90", "95", "=(B2+C2+D2)/3"],
         ["Rahul", "78", "82", "88", "=(B3+C3+D3)/3"],
       ],
     },
+    {
+      key: "school-study",
+      name: "Study Plan",
+      description: "Subjects, chapters, schedule",
+      category: "School",
+      data: [
+        ["Subject", "Topic", "Pages", "Date", "Status"],
+        ["Math", "Derivatives", "35-54", "2025-10-12", "Planned"],
+        ["Physics", "Kinematics", "12-30", "2025-10-14", "Planned"],
+      ],
+    },
+    // ==== Business ====
+    {
+      key: "biz-sales",
+      name: "Sales Tracker",
+      description: "Units, price, revenue with totals",
+      category: "Business",
+      data: [
+        ["Item", "Units", "Price", "Revenue"],
+        ["Widget A", "12", "9.5", "=B2*C2"],
+        ["Widget B", "7", "14.0", "=B3*C3"],
+        [],
+        ["TOTAL", "", "", "=SUM(D2:D3)"],
+      ],
+    },
+    {
+      key: "biz-inventory",
+      name: "Inventory",
+      description: "Stock, reorder level, status",
+      category: "Business",
+      data: [
+        ["SKU", "Name", "In Stock", "Reorder Level", "Status"],
+        ["A101", "Cable 1m", "44", "20", "=IF(C2<=D2,\"Reorder\",\"OK\")"],
+        ["A205", "HDMI Adapter", "12", "15", "=IF(C3<=D3,\"Reorder\",\"OK\")"],
+      ],
+    },
   ];
 
+ 
+
+function matrixToTemplate(name: string, matrix: string[][]): TemplateDef {
+  const cells: Record<string, CellData> = {};
+  let maxCols = 0;
+
+  const colToA1 = (col: number) => {
+    let s = "";
+    while (col >= 0) {
+      s = String.fromCharCode((col % 26) + 65) + s;
+      col = Math.floor(col / 26) - 1;
+    }
+    return s;
+  };
+
+  for (let r = 0; r < matrix.length; r++) {
+    const row = matrix[r] || [];
+    maxCols = Math.max(maxCols, row.length);
+
+    for (let c = 0; c < row.length; c++) {
+      const v = row[c];
+      if (v === undefined || v === null || v === "") continue;
+
+      const a1 = `${colToA1(c)}${r + 1}`;
+      const asText = String(v);
+
+      if (asText.startsWith("=")) {
+        // formulas: keep only raw
+        cells[a1] = { raw: asText };
+      } else {
+        // literals: set both raw and value (header row bold)
+        cells[a1] = r === 0
+          ? { raw: asText, value: asText, bold: true }
+          : { raw: asText, value: asText };
+      }
+    }
+  }
+
+  return {
+    name,
+    rows: Math.max(200, matrix.length + 50),
+    cols: Math.max(50, maxCols + 10),
+    cells,
+  };
+}
+
+  // ===== CSV export helper (kept for users who want it) =====
   function toCSV(matrix: string[][]): string {
     const esc = (s: string) =>
       /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     return matrix.map((row) => row.map((c) => esc(c ?? "")).join(",")).join("\r\n");
-  }
-  function toTSV(matrix: string[][]): string {
-    return matrix.map((row) => row.map((c) => c ?? "").join("\t")).join("\r\n");
-  }
-  async function copyTSV(matrix: string[][]) {
-    try {
-      await navigator.clipboard.writeText(toTSV(matrix));
-      alert("Template copied! After the new sheet opens, click A1 and paste (Ctrl/Cmd+V).");
-    } catch {
-      alert("Clipboard not available. Use Download CSV instead.");
-    }
   }
   function downloadCSV(name: string, matrix: string[][]) {
     const blob = new Blob([toCSV(matrix)], { type: "text/csv;charset=utf-8;" });
@@ -117,7 +242,11 @@ export default function Dashboard({
     URL.revokeObjectURL(url);
   }
 
-  // ------------------------------------------------------------------
+  // Filtered view for the gallery
+  const filtered = useMemo(
+    () => (activeCat === "All" ? templates : templates.filter(t => t.category === activeCat)),
+    [activeCat, templates]
+  );
 
   return (
     <div
@@ -131,7 +260,7 @@ export default function Dashboard({
         overflow: "hidden",
       }}
     >
-      {/* background glow */}
+      {/* subtle background glow */}
       <div
         aria-hidden
         style={{
@@ -153,19 +282,15 @@ export default function Dashboard({
           zIndex: 1,
         }}
       >
-        {/* Left section: Logo + Welcome message */}
+        {/* Left: Logo + Welcome */}
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <img
             src={dark ? logoDark : logoLight}
             alt="Logo"
-            style={{
-              width: 130,
-              height: 130,
-              objectFit: "contain",
-            }}
+            style={{ width: 130, height: 130, objectFit: "contain" }}
             draggable={false}
           />
-        <div>
+          <div>
             <h1
               style={{
                 margin: 0,
@@ -183,7 +308,7 @@ export default function Dashboard({
           </div>
         </div>
 
-        {/* Right section: buttons */}
+        {/* Right: buttons */}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <button
             onClick={onToggleTheme}
@@ -233,14 +358,20 @@ export default function Dashboard({
           accent={C.accent}
           accentText={C.accentText}
         />
-        <ActionCard
-          title="Use Templates"
-          subtitle="Budget, study, workout & more"
-          icon="✨"
-          onClick={() => setShowTemplates(true)}  // ← make it active
-          accent={C.accent}
-          accentText={C.accentText}
-        />
+
+    
+{/* Browse Templates — opens modal with categories */}
+<ActionCard
+  title="Use Templates"
+  subtitle="Budget, study, workout & more"
+  icon="✨"
+  onClick={() => setShowTemplates(true)}   // 👈 open the modal instead of creating
+  accent={C.accent}
+  accentText={C.accentText}
+/>
+
+
+
         <ActionCard
           title="Import File"
           subtitle="Upload CSV or JSON"
@@ -248,6 +379,7 @@ export default function Dashboard({
           onClick={() => alert("Import feature coming soon")}
           dim
         />
+
         <ActionCard
           title="Advanced Features"
           subtitle="Analytics, Achievements, Activity Log"
@@ -291,12 +423,12 @@ export default function Dashboard({
                     justifyContent: "space-between",
                     transition: "background .15s ease",
                   }}
-                  onMouseEnter={(e) =>
-                    ((e.currentTarget.style.background = C.cardHover))
-                  }
-                  onMouseLeave={(e) =>
-                    ((e.currentTarget.style.background = C.panel))
-                  }
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = C.cardHover;
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = C.panel;
+                  }}
                 >
                   <div>
                     <div style={{ fontWeight: 700, fontSize: 15 }}>{s.name}</div>
@@ -312,7 +444,7 @@ export default function Dashboard({
         </div>
       )}
 
-      {/* ---------------- Template Gallery Modal ---------------- */}
+      {/* ===== Template Gallery Modal with Categories ===== */}
       {showTemplates && (
         <div
           onClick={() => setShowTemplates(false)}
@@ -330,7 +462,7 @@ export default function Dashboard({
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              width: 720,
+              width: 920,
               maxWidth: "95vw",
               background: C.card,
               color: C.text,
@@ -340,6 +472,7 @@ export default function Dashboard({
               boxShadow: "0 10px 30px rgba(0,0,0,.35)",
             }}
           >
+            {/* Header row */}
             <div
               style={{
                 display: "flex",
@@ -364,6 +497,31 @@ export default function Dashboard({
               </button>
             </div>
 
+            {/* Category tabs */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+              {categories.map((cat) => {
+                const active = activeCat === cat;
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => setActiveCat(cat)}
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: 999,
+                      border: `1px solid ${active ? C.accent : C.border}`,
+                      background: active ? C.accent : C.panel,
+                      color: active ? C.accentText : C.text,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {cat}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Template cards grid */}
             <div
               style={{
                 display: "grid",
@@ -371,7 +529,7 @@ export default function Dashboard({
                 gap: 12,
               }}
             >
-              {templates.map((t) => (
+              {filtered.map((t) => (
                 <div
                   key={t.key}
                   style={{
@@ -386,11 +544,13 @@ export default function Dashboard({
                 >
                   <div style={{ fontWeight: 700, fontSize: 16 }}>{t.name}</div>
                   <div style={{ fontSize: 13, color: C.sub }}>{t.description}</div>
+
                   <div style={{ display: "grid", gap: 8, marginTop: 6 }}>
+                    {/* Create directly from template (matrix → A1 cells) */}
                     <button
                       onClick={() => {
-                        onCreateSheet();           // create blank using existing app logic
-                        copyTSV(t.data);           // copy data so user can paste immediately
+                        const tmpl = matrixToTemplate(t.name, t.data);
+                        onCreateFromTemplate(tmpl);
                         setShowTemplates(false);
                       }}
                       style={{
@@ -403,8 +563,9 @@ export default function Dashboard({
                         cursor: "pointer",
                       }}
                     >
-                      Create & Copy (Paste into A1)
+                      Create from Template
                     </button>
+
                     <button
                       onClick={() => downloadCSV(t.name, t.data)}
                       style={{
@@ -425,18 +586,16 @@ export default function Dashboard({
             </div>
 
             <div style={{ marginTop: 12, fontSize: 12, color: C.sub }}>
-              Tip: After creating, open the new sheet, click cell <b>A1</b>, and paste (Ctrl/Cmd+V).
-              You can also use the sheet’s “Import CSV” button.
+              Tip: After creation you can edit headers, add more formulas, and resize columns.
             </div>
           </div>
         </div>
       )}
-      {/* -------------------------------------------------------- */}
     </div>
   );
 }
 
-/* 🔹 Small reusable Action Card component */
+/* small reusable Action Card */
 const ActionCard: React.FC<{
   title: string;
   subtitle: string;

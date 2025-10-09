@@ -12,12 +12,19 @@ type SheetMeta = {
   cols: number;
   storageKey: string;
 };
+type CellData = {
+  value?: any;
+  raw?: string;
+  bold?: boolean;
+  formula?: string;
+};
+
 type TemplateDef = {
   name: string;
   rows?: number;
   cols?: number;
-  cells: Record<string, { raw?: string; value?: any }>;
-}
+  cells: Record<string, CellData>;
+};
 
 const WORKBOOK_KEY = "excel-clone:workbook-meta";
 const THEME_KEY = "excel-clone:theme";
@@ -49,33 +56,45 @@ function ensureWorkbook(): SheetMeta[] {
 
 export default function App() {
   // Inside App() add:
+// App.tsx
 const createFromTemplate = (tmpl: TemplateDef) => {
-  // allow template to suggest size, but keep defaults if missing
   const rows = tmpl.rows ?? 200;
   const cols = tmpl.cols ?? 50;
 
   const meta = makeNewMeta(tmpl.name, rows, cols);
+
   setSheets(prev => {
     const next = [...prev, meta];
+
+    // persist workbook list
     localStorage.setItem(WORKBOOK_KEY, JSON.stringify(next));
 
-    // Seed the new sheet with template cells
-    localStorage.setItem(
-      meta.storageKey,
-      JSON.stringify({
-        cells: tmpl.cells, // Sheet.tsx can read this shape directly
-        rowCount: rows,
-        colCount: cols,
-      })
-    );
+    // seed cells into the new sheet
+    const payload = {
+      cells: tmpl.cells,   // <-- prefilled A1 map
+      rowCount: rows,
+      colCount: cols,
+    };
+    localStorage.setItem(meta.storageKey, JSON.stringify(payload));
+
+    // (debug) verify we saved something
+    try {
+      const check = JSON.parse(localStorage.getItem(meta.storageKey) || "{}");
+      const count = check?.cells ? Object.keys(check.cells).length : 0;
+      console.log(`Template “${tmpl.name}” seeded: ${count} cells`);
+    } catch {}
+
+    // ✅ select the newly created sheet (use next.length - 1, not sheets.length)
+    setActiveIndex(next.length - 1);
 
     return next;
   });
 
-  // jump straight into the new sheet
-  setActiveIndex(sheets.length);
   setView("sheet");
 };
+
+
+
   // Theme
   const [theme, setTheme] = useState<"light" | "dark">(
     () => (localStorage.getItem(THEME_KEY) as "light" | "dark") || "light"
@@ -202,27 +221,28 @@ const [user, setUser] = useState<User | null>(null);
     );
 
   // 🟢 3) Dashboard
-  if (view === "dashboard")
-    return (
-      <Fade show={!showSplash}>
-        <Dashboard
-          theme={theme}
-          user={user}
-          sheets={sheets}
-          onOpenSheet={(i) => {
-            setActiveIndex(i);
-            setView("sheet");
-          }}
-          onCreateSheet={() => {
-            addSheet();
-            setView("sheet");
-          }}
-          onLogout={handleLogout}
-          onToggleTheme={toggleTheme}
-        />
-      </Fade>
-      
-    );
+if (view === "dashboard")
+  return (
+    <Fade show={!showSplash}>
+      <Dashboard
+        theme={theme}
+        user={user}
+        sheets={sheets}
+        onOpenSheet={(i) => {
+          setActiveIndex(i);
+          setView("sheet");
+        }}
+        onCreateSheet={() => {
+          addSheet();
+          setView("sheet");
+        }}
+        onCreateFromTemplate={createFromTemplate} // ✅ Add this
+        onLogout={handleLogout}
+        onToggleTheme={toggleTheme}
+      />
+    </Fade>
+  );
+
 
   // 🟢 4) Sheet view
   return (
@@ -282,12 +302,14 @@ const [user, setUser] = useState<User | null>(null);
         <div style={{ flex: 1, minHeight: 0 }}>
           {activeSheet ? (
             <Sheet
-              rows={activeSheet.rows}
-              cols={activeSheet.cols}
-              storageKey={activeSheet.storageKey}
-              sheetName={activeSheet.name}
-              theme={theme}
-            />
+  key={activeSheet.storageKey}   // 👈 add this line
+  rows={activeSheet.rows}
+  cols={activeSheet.cols}
+  storageKey={activeSheet.storageKey}
+  sheetName={activeSheet.name}
+  theme={theme}
+/>
+
           ) : (
             <div style={{ padding: 16 }}>No sheet loaded.</div>
           )}
