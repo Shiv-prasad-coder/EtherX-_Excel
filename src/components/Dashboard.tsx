@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import logoLight from "../assets/logo_light.png";
 import logoDark from "../assets/logo_dark.png";
 
@@ -42,6 +42,82 @@ export default function Dashboard({
     accent: "#2563eb",
     accentText: "#ffffff",
   };
+
+  // ---------------- Templates (no app logic changes) ----------------
+  const [showTemplates, setShowTemplates] = useState(false);
+
+  // Templates are defined as simple 2D arrays (rows of strings).
+  // We’ll offer “Copy to clipboard (TSV)” and “Download CSV”.
+  const templates: {
+    key: string;
+    name: string;
+    description: string;
+    data: string[][];
+  }[] = [
+    {
+      key: "budget",
+      name: "Monthly Budget",
+      description: "Plan vs Actual with difference + totals",
+      data: [
+        ["Category", "Planned", "Actual", "Difference"],
+        ["Rent", "1200", "1200", "=C2-B2"],
+        ["Groceries", "350", "310", "=C3-B3"],
+        ["Transport", "120", "95", "=C4-B4"],
+        [],
+        ["TOTALS", "=SUM(B2:B4)", "=SUM(C2:C4)", "=C6-B6"],
+      ],
+    },
+    {
+      key: "tasks",
+      name: "Task Tracker",
+      description: "Simple task/assignee/priority/status view",
+      data: [
+        ["Task", "Assignee", "Priority", "Status", "Due"],
+        ["Landing page copy", "Alex", "High", "In Progress", "2025-10-20"],
+        ["Email welcome series", "Sam", "Medium", "Todo", "2025-10-25"],
+      ],
+    },
+    {
+      key: "gradebook",
+      name: "Gradebook",
+      description: "Average computed from three assessments",
+      data: [
+        ["Student", "Quiz 1", "Quiz 2", "Project", "Average"],
+        ["Priya", "86", "90", "95", "=(B2+C2+D2)/3"],
+        ["Rahul", "78", "82", "88", "=(B3+C3+D3)/3"],
+      ],
+    },
+  ];
+
+  function toCSV(matrix: string[][]): string {
+    const esc = (s: string) =>
+      /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    return matrix.map((row) => row.map((c) => esc(c ?? "")).join(",")).join("\r\n");
+  }
+  function toTSV(matrix: string[][]): string {
+    return matrix.map((row) => row.map((c) => c ?? "").join("\t")).join("\r\n");
+  }
+  async function copyTSV(matrix: string[][]) {
+    try {
+      await navigator.clipboard.writeText(toTSV(matrix));
+      alert("Template copied! After the new sheet opens, click A1 and paste (Ctrl/Cmd+V).");
+    } catch {
+      alert("Clipboard not available. Use Download CSV instead.");
+    }
+  }
+  function downloadCSV(name: string, matrix: string[][]) {
+    const blob = new Blob([toCSV(matrix)], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${name.replace(/\s+/g, "_").toLowerCase()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  // ------------------------------------------------------------------
 
   return (
     <div
@@ -89,7 +165,7 @@ export default function Dashboard({
             }}
             draggable={false}
           />
-          <div>
+        <div>
             <h1
               style={{
                 margin: 0,
@@ -161,7 +237,7 @@ export default function Dashboard({
           title="Use Templates"
           subtitle="Budget, study, workout & more"
           icon="✨"
-          onClick={() => alert("Template gallery coming soon")}
+          onClick={() => setShowTemplates(true)}  // ← make it active
           accent={C.accent}
           accentText={C.accentText}
         />
@@ -235,6 +311,127 @@ export default function Dashboard({
           </div>
         </div>
       )}
+
+      {/* ---------------- Template Gallery Modal ---------------- */}
+      {showTemplates && (
+        <div
+          onClick={() => setShowTemplates(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 50,
+            padding: 16,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 720,
+              maxWidth: "95vw",
+              background: C.card,
+              color: C.text,
+              border: `1px solid ${C.border}`,
+              borderRadius: 14,
+              padding: 18,
+              boxShadow: "0 10px 30px rgba(0,0,0,.35)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 12,
+              }}
+            >
+              <div style={{ fontWeight: 800, fontSize: 18 }}>Template Gallery</div>
+              <button
+                onClick={() => setShowTemplates(false)}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 8,
+                  border: `1px solid ${C.border}`,
+                  background: C.panel,
+                  color: C.text,
+                  cursor: "pointer",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: 12,
+              }}
+            >
+              {templates.map((t) => (
+                <div
+                  key={t.key}
+                  style={{
+                    border: `1px solid ${C.border}`,
+                    background: C.panel,
+                    borderRadius: 12,
+                    padding: 14,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, fontSize: 16 }}>{t.name}</div>
+                  <div style={{ fontSize: 13, color: C.sub }}>{t.description}</div>
+                  <div style={{ display: "grid", gap: 8, marginTop: 6 }}>
+                    <button
+                      onClick={() => {
+                        onCreateSheet();           // create blank using existing app logic
+                        copyTSV(t.data);           // copy data so user can paste immediately
+                        setShowTemplates(false);
+                      }}
+                      style={{
+                        padding: "10px",
+                        borderRadius: 10,
+                        background: C.accent,
+                        color: C.accentText,
+                        border: "none",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Create & Copy (Paste into A1)
+                    </button>
+                    <button
+                      onClick={() => downloadCSV(t.name, t.data)}
+                      style={{
+                        padding: "10px",
+                        borderRadius: 10,
+                        background: C.panel,
+                        color: C.text,
+                        border: `1px solid ${C.border}`,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Download CSV
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ marginTop: 12, fontSize: 12, color: C.sub }}>
+              Tip: After creating, open the new sheet, click cell <b>A1</b>, and paste (Ctrl/Cmd+V).
+              You can also use the sheet’s “Import CSV” button.
+            </div>
+          </div>
+        </div>
+      )}
+      {/* -------------------------------------------------------- */}
     </div>
   );
 }

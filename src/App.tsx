@@ -12,6 +12,12 @@ type SheetMeta = {
   cols: number;
   storageKey: string;
 };
+type TemplateDef = {
+  name: string;
+  rows?: number;
+  cols?: number;
+  cells: Record<string, { raw?: string; value?: any }>;
+}
 
 const WORKBOOK_KEY = "excel-clone:workbook-meta";
 const THEME_KEY = "excel-clone:theme";
@@ -42,6 +48,34 @@ function ensureWorkbook(): SheetMeta[] {
 }
 
 export default function App() {
+  // Inside App() add:
+const createFromTemplate = (tmpl: TemplateDef) => {
+  // allow template to suggest size, but keep defaults if missing
+  const rows = tmpl.rows ?? 200;
+  const cols = tmpl.cols ?? 50;
+
+  const meta = makeNewMeta(tmpl.name, rows, cols);
+  setSheets(prev => {
+    const next = [...prev, meta];
+    localStorage.setItem(WORKBOOK_KEY, JSON.stringify(next));
+
+    // Seed the new sheet with template cells
+    localStorage.setItem(
+      meta.storageKey,
+      JSON.stringify({
+        cells: tmpl.cells, // Sheet.tsx can read this shape directly
+        rowCount: rows,
+        colCount: cols,
+      })
+    );
+
+    return next;
+  });
+
+  // jump straight into the new sheet
+  setActiveIndex(sheets.length);
+  setView("sheet");
+};
   // Theme
   const [theme, setTheme] = useState<"light" | "dark">(
     () => (localStorage.getItem(THEME_KEY) as "light" | "dark") || "light"
@@ -187,6 +221,7 @@ const [user, setUser] = useState<User | null>(null);
           onToggleTheme={toggleTheme}
         />
       </Fade>
+      
     );
 
   // 🟢 4) Sheet view
