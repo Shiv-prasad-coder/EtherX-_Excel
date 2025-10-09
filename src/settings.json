@@ -1,0 +1,8 @@
+{
+  "css.lint.unknownAtRules": "ignore",
+  "files.associations": {
+    "src/index.css": "postcss",
+    "*.pcss": "postcss",
+    "*.css": "css"           /* keep default for others */
+  }
+}
