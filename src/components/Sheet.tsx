@@ -125,6 +125,7 @@ const [ribbonTab, setRibbonTab] = useState<"home" | "insert" | "view">("home");
 const [rules, setRules] = useState<{ condition: string; value: string; color: string }[]>([]);
 
 
+
   /** Freeze toggles */
   const [freezeTopRow, setFreezeTopRow] = useState(false);
   const [freezeFirstCol, setFreezeFirstCol] = useState(false);
@@ -132,6 +133,165 @@ const [rules, setRules] = useState<{ condition: string; value: string; color: st
   /** Conditional formatting toggle */
   const [condEnabled, setCondEnabled] = useState(false);
   const [showCondModal, setShowCondModal] = useState(false);
+// ---------- Pivot table UI / logic (drop into Sheet component) ----------
+const [showPivotModal, setShowPivotModal] = useState(false);
+const [pivotPreview, setPivotPreview] = useState<string[][] | null>(null);
+const [pivotOpts, setPivotOpts] = useState<{
+  rowIndex: number;
+  colIndex: number | null;
+  valueIndex: number;
+  agg: "sum" | "count" | "avg" | "min" | "max";
+  includeHeaderRow: boolean;
+}>({
+  rowIndex: 0,
+  colIndex: null,
+  valueIndex: 1,
+  agg: "sum",
+  includeHeaderRow: true,
+});
+
+/** Helper: get textual value from a cell id */
+function cellToText(id: string): string {
+  const v = cells[id];
+  if (!v) return "";
+  if (v.raw != null) return String(v.raw);
+  if (v.value != null) return String(v.value);
+  return "";
+}
+
+/** Build a matrix (strings) from a given selection range */
+function rangeToMatrix(rng: { r1: number; c1: number; r2: number; c2: number }) {
+  const rows: string[][] = [];
+  const rMin = Math.min(rng.r1, rng.r2);
+  const rMax = Math.max(rng.r1, rng.r2);
+  const cMin = Math.min(rng.c1, rng.c2);
+  const cMax = Math.max(rng.c1, rng.c2);
+  for (let r = rMin; r <= rMax; r++) {
+    const row: string[] = [];
+    for (let c = cMin; c <= cMax; c++) {
+      row.push(cellToText(cellId(r, c)));
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+/** Pivot computation: from matrix (rows of strings) produce pivot matrix */
+function computePivotMatrix(
+  matrix: string[][],
+  rowIdx: number,
+  colIdx: number | null,
+  valueIdx: number,
+  agg: "sum" | "count" | "avg" | "min" | "max"
+): string[][] {
+  // matrix: array of rows, possibly including header row at index 0
+  // We'll treat input rows as data rows (not excluding headers) — caller decides
+  const dataRows = matrix;
+  const rowMap = new Map<string, Map<string, { sum: number; count: number; min: number; max: number }>>();
+  const rowKeysSet = new Set<string>();
+  const colKeysSet = new Set<string>();
+  const colAllKey = "__ALL__";
+
+  for (const r of dataRows) {
+    const rowKey = String(r[rowIdx] ?? "");
+    const colKey = colIdx == null ? colAllKey : String(r[colIdx] ?? "");
+    const valRaw = r[valueIdx] ?? "";
+    const valNum = Number(String(valRaw).replace(/,/g, "")); // attempt numeric
+    const isNum = Number.isFinite(valNum);
+
+    let inner = rowMap.get(rowKey);
+    if (!inner) { inner = new Map(); rowMap.set(rowKey, inner); }
+    let aggObj = inner.get(colKey);
+    if (!aggObj) aggObj = { sum: 0, count: 0, min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY };
+
+    if (agg === "count") {
+      // count presence
+      const present = String(valRaw).trim() !== "";
+      if (present) { aggObj.count += 1; aggObj.sum += isNum ? valNum : 0; }
+    } else {
+      if (isNum) {
+        aggObj.sum += valNum;
+        aggObj.count += 1;
+        aggObj.min = Math.min(aggObj.min, valNum);
+        aggObj.max = Math.max(aggObj.max, valNum);
+      } else {
+        // non-numeric values: for count treat as 1, else ignore (you could change behavior)
+        if (agg === "sum" || agg === "avg" || agg === "min" || agg === "max") {
+          // ignore non-numeric in numeric aggregations
+        }
+      }
+    }
+
+    inner.set(colKey, aggObj);
+    rowKeysSet.add(rowKey);
+    colKeysSet.add(colKey);
+  }
+
+  const rowKeys = Array.from(rowKeysSet).sort();
+  const colKeys = Array.from(colKeysSet).filter(k => k !== "__ALL__").sort();
+  const includeAllCol = colIdx == null; // if colIndex null, we used single pivot column
+
+  // Build header row: [RowField, colKey1, ..., colKeyN, (Total)]
+  const headerRow = [ " " , ...colKeys ];
+  if (includeAllCol || colKeys.length > 0) headerRow.push("Total");
+  const out: string[][] = [headerRow];
+
+  function finalize(aggObj?: { sum: number; count: number; min: number; max: number }): string {
+    if (!aggObj) return "";
+    if (agg === "count") return String(aggObj.count);
+    if (agg === "sum") return String(Number.isFinite(aggObj.sum) ? +aggObj.sum : "");
+    if (agg === "avg") return aggObj.count ? String(+(aggObj.sum / aggObj.count).toFixed(4)) : "";
+    if (agg === "min") return aggObj.min === Number.POSITIVE_INFINITY ? "" : String(aggObj.min);
+    if (agg === "max") return aggObj.max === Number.NEGATIVE_INFINITY ? "" : String(aggObj.max);
+    return "";
+  }
+
+  for (const rk of rowKeys) {
+    const inner = rowMap.get(rk) ?? new Map();
+    const rowOut: string[] = [rk];
+    let rowTotalObj = { sum: 0, count: 0, min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY };
+    for (const ck of colKeys) {
+      const aggObj = inner.get(ck);
+      rowOut.push(finalize(aggObj));
+      if (agg === "count") { rowTotalObj.count += aggObj?.count ?? 0; }
+      else { rowTotalObj.sum += aggObj?.sum ?? 0; rowTotalObj.count += aggObj?.count ?? 0; rowTotalObj.min = Math.min(rowTotalObj.min, aggObj?.min ?? Number.POSITIVE_INFINITY); rowTotalObj.max = Math.max(rowTotalObj.max, aggObj?.max ?? Number.NEGATIVE_INFINITY); }
+    }
+    // total
+    rowOut.push(finalize(rowTotalObj));
+    out.push(rowOut);
+  }
+
+  // optionally append a "Totals" row (sum across rows)
+  const totalsRow = ["Totals"];
+  if (rowKeys.length > 0) {
+    for (let i = 0; i < colKeys.length; i++) {
+      // sum down column i
+      let colSumObj = { sum: 0, count: 0, min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY };
+      for (const rk of rowKeys) {
+        const aggObj = rowMap.get(rk)?.get(colKeys[i]);
+        if (aggObj) {
+          colSumObj.sum += aggObj.sum ?? 0;
+          colSumObj.count += aggObj.count ?? 0;
+          colSumObj.min = Math.min(colSumObj.min, aggObj.min ?? Number.POSITIVE_INFINITY);
+          colSumObj.max = Math.max(colSumObj.max, aggObj.max ?? Number.NEGATIVE_INFINITY);
+        }
+      }
+      totalsRow.push(finalize(colSumObj));
+    }
+    // grand total
+    let grand = { sum: 0, count: 0, min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY };
+    for (const rk of rowKeys) {
+      for (const ck of colKeys) {
+        const a = rowMap.get(rk)?.get(ck);
+        if (a) { grand.sum += a.sum ?? 0; grand.count += a.count ?? 0; grand.min = Math.min(grand.min, a.min ?? Number.POSITIVE_INFINITY); grand.max = Math.max(grand.max, a.max ?? Number.NEGATIVE_INFINITY); }
+      }
+    }
+    totalsRow.push(finalize(grand));
+    out.push(totalsRow);
+  }
+
+  return out;
+}
 
 
   /** Column widths */
@@ -283,7 +443,27 @@ const commitEdit = useCallback((id: string, raw: string) => {
   });
 
   setEditing(null);
-}, []);
+}, []);// place inside the component where commitEdit and selectedRef are in scope
+function insertCurrentDateTime(includeTime: boolean) {
+  const sel = selectedRef.current;
+  if (!sel) {
+    alert("Please select a cell first.");
+    return;
+  }
+
+  const now = new Date();
+  if (includeTime) {
+    // keep format simple: YYYY-MM-DD HH:MM
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    commitEdit(sel, value);
+  } else {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    commitEdit(sel, value);
+  }
+}
+
 
 
 
@@ -470,68 +650,77 @@ const commitEdit = useCallback((id: string, raw: string) => {
   }, [cells, colCount, rowCount, editing]);
 
   /** Load from localStorage (incl. condEnabled) */
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(effectiveKey);
-    // inside useEffect(() => { ... }, [effectiveKey])
-if (raw) {
-  const saved = JSON.parse(raw) as {
-    cells: Record<string, CellValue>;
-    selected?: string;
-    colWidths?: number[];
-    freezeTopRow?: boolean;
-    freezeFirstCol?: boolean;
-    formats?: Record<string, CellFmt>;
-    rowCount?: number;
-    colCount?: number;
-    condEnabled?: boolean;
-  };
+  /** Load from localStorage (incl. condEnabled) */
+// Paste this entire block in place of your previous "Load from localStorage" useEffect
+useEffect(() => {
+  try {
+    const raw = localStorage.getItem(effectiveKey);
+    if (raw) {
+      // parse safely
+      const saved = JSON.parse(raw) as {
+        cells?: Record<string, CellValue>;
+        selected?: string | null;
+        colWidths?: number[];
+        freezeTopRow?: boolean;
+        freezeFirstCol?: boolean;
+        formats?: Record<string, CellFmt>;
+        rowCount?: number;
+        colCount?: number;
+        condEnabled?: boolean;
+      };
 
-  // 🔧 NEW: hydrate values and evaluate formulas once
-  const nextCells: Record<string, CellValue> = { ...(saved.cells || {}) };
-  for (const [id, cell] of Object.entries(nextCells)) {
-    if (!cell) continue;
-    const raw = cell.raw ?? "";
-
-    if (typeof raw === "string" && raw.startsWith("=")) {
-      // let the formula engine compute .value
-      evaluateAndUpdate(nextCells, id);
-    } else {
-      // plain literal: make sure .value is present so the grid can render it
-      if (typeof cell.value === "undefined") {
-        nextCells[id] = { ...cell, value: raw };
+      // If cells exist in storage, attempt to evaluate formulas so .value is populated.
+      if (saved.cells) {
+        try {
+          // evaluateAndUpdate mutates saved.cells to populate computed values
+          evaluateAndUpdate(saved.cells);
+        } catch (err) {
+          // don't block load on evaluation error — show warning for debugging
+          // eslint-disable-next-line no-console
+          console.warn("Formula evaluation failed when loading sheet:", err);
+        }
+        setCells(saved.cells);
+      } else {
+        setCells({});
       }
-    }
-  }
 
-  setCells(nextCells);
-  if (saved.colWidths?.length) setColWidths(saved.colWidths);
-  if (typeof saved.freezeTopRow === "boolean") setFreezeTopRow(saved.freezeTopRow);
-  if (typeof saved.freezeFirstCol === "boolean") setFreezeFirstCol(saved.freezeFirstCol);
-  if (saved.formats) setFormats(saved.formats);
-  if (typeof saved.rowCount === "number") setRowCount(saved.rowCount);
-  if (typeof saved.colCount === "number") setColCount(saved.colCount);
-  if (typeof saved.condEnabled === "boolean") setCondEnabled(saved.condEnabled);
+      if (Array.isArray(saved.colWidths) && saved.colWidths.length) setColWidths(saved.colWidths);
+      if (typeof saved.freezeTopRow === "boolean") setFreezeTopRow(saved.freezeTopRow);
+      if (typeof saved.freezeFirstCol === "boolean") setFreezeFirstCol(saved.freezeFirstCol);
+      if (saved.formats) setFormats(saved.formats);
+      if (typeof saved.rowCount === "number") setRowCount(saved.rowCount);
+      if (typeof saved.colCount === "number") setColCount(saved.colCount);
+      if (typeof saved.condEnabled === "boolean") setCondEnabled(saved.condEnabled);
 
-  selectedRef.current = saved.selected ?? "A1";
-  const id = selectedRef.current;
-  setFormulaBar(
-    nextCells[id]?.raw ?? (nextCells[id]?.value?.toString() ?? "")
-  );
-  setRange({ r1: 0, c1: 0, r2: 0, c2: 0 });
-} else {
-  selectedRef.current = "A1";
-  setRange({ r1: 0, c1: 0, r2: 0, c2: 0 });
-}
+      // ensure selectedRef.current is a string before using it as an index
+      selectedRef.current = saved.selected ?? "A1";
+      const id = selectedRef.current ?? "A1"; // GUARANTEED string for indexing
 
-    } catch {
+      // only read formula/raw/value safely if saved.cells exists
+      const cellForId = saved.cells?.[id];
+      setFormulaBar(cellForId?.raw ?? (cellForId?.value != null ? String(cellForId.value) : ""));
+      setRange({ r1: 0, c1: 0, r2: 0, c2: 0 });
+    } else {
+      // no saved state
       selectedRef.current = "A1";
       setRange({ r1: 0, c1: 0, r2: 0, c2: 0 });
+      setCells({}); // start empty
     }
-    historyRef.current = [takeSnapshot()];
-    futureRef.current = [];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveKey]);
+  } catch (err) {
+    // parse/read error — fallback to defaults
+    // eslint-disable-next-line no-console
+    console.warn("Failed to load sheet from storage:", err);
+    selectedRef.current = "A1";
+    setRange({ r1: 0, c1: 0, r2: 0, c2: 0 });
+    setCells({});
+  }
+
+  // initialize history/future (you had this previously)
+  historyRef.current = [takeSnapshot()];
+  futureRef.current = [];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [effectiveKey]);
+
 
   /** Autosave */
   useEffect(() => {
@@ -862,6 +1051,7 @@ if (raw) {
     const p = anchorRC();
     if (p) { const nc = Math.min(idx, colCount - 2); selectedRef.current = cellId(p.row, Math.max(0, nc)); }
   }
+  
 
   /** Fill-handle helpers */
   function startFillDrag(srcRect: { r1: number; c1: number; r2: number; c2: number }, startEvt: MouseEvent) {
@@ -1505,8 +1695,73 @@ const currentFmt =
   ) : (
     /* Non-Home tabs: simple placeholder without changing logic */
     <div className="px-3 py-3" style={{ background: pal.surfaceAlt, color: pal.text }}>
-      {ribbonTab === "insert" && "Insert tab (coming soon)"}
-      {ribbonTab === "view" && "View tab (coming soon)"}
+   {/* ===== Insert Tab (replace your current insert tab block) ===== */}
+{ribbonTab === "insert" && (
+  <div
+    style={{
+      display: "flex",
+      gap: 12,
+      alignItems: "flex-start",
+      flexWrap: "wrap",
+      padding: 8,
+    }}
+  >
+    {/* Formula bar — still visible inside insert tab, mirrors grid selection */}
+    <input
+      className="toolbar-input flex-1 min-w-[260px]"
+      style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+      value={formulaBar}
+      onChange={(e) => setFormulaBar(e.target.value)}
+      onKeyDown={(e) => {
+        // Prevent accidental form submit and commit only when Enter is pressed
+        if (e.key === "Enter") {
+          e.preventDefault();
+          const sel = selectedRef.current;
+          if (sel) commitEdit(sel, formulaBar);
+        }
+      }}
+      placeholder="Type value or =formula"
+      aria-label="Formula bar"
+    />
+
+    {/* Group: Date / DateTime (separate buttons) */}
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ fontSize: 12, color: "#6b7280", fontWeight: 700 }}>Time</div>
+
+      <div style={{ display: "flex", gap: 8 }}>
+        <button
+          type="button"
+          onClick={() => {
+            const sel = selectedRef.current;
+            if (!sel) return alert("Select a cell first");
+            // insertCurrentDateTime(false) should write the date into the selected cell
+            insertCurrentDateTime(false);
+          }}
+          style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+        >
+          Insert Date
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            const sel = selectedRef.current;
+            if (!sel) return alert("Select a cell first");
+            insertCurrentDateTime(true);
+          }}
+          style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+        >
+          Insert DateTime
+        </button>
+        <button type="button" onClick={() => { if (!range) return alert("Select a data range first"); setShowPivotModal(true); }}>
+   Pivot Table
+  </button>
+      </div>
+    </div>
+  </div>
+)}
+
+
     </div>
   )}
 </div>
@@ -1737,6 +1992,159 @@ color: pal.text,
     </div>
   </div>
 )}
+{showPivotModal && range && (
+  <div
+    onClick={() => setShowPivotModal(false)}
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0,0,0,0.45)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 1200,
+      padding: 12,
+    }}
+  >
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        width: 720,
+        maxWidth: "96vw",
+        background: pal.surface,
+        color: pal.text,
+        border: `1px solid ${pal.border}`,
+        borderRadius: 12,
+        padding: 16,
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ fontWeight: 800, fontSize: 16 }}>Create Pivot Table</div>
+        <button type="button" onClick={() => setShowPivotModal(false)} style={{ border: `1px solid ${pal.border}`, background: pal.surface, color: pal.text }}>✕</button>
+      </div>
+
+      {/* read headers from the selected range */}
+      <div style={{ marginTop: 12 }}>
+        <div style={{ fontSize: 13, color: pal.textMuted }}>Selected range will be used as source. First row in range is treated as headers.</div>
+
+        {/* extract headers */}
+        {(() => {
+          const mat = rangeToMatrix(range);
+          const headers = mat[0] ?? [];
+          return (
+            <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+              <div style={{ minWidth: 200 }}>
+                <div style={{ fontSize: 12, color: pal.textMuted }}>Row field</div>
+                <select
+                  value={pivotOpts.rowIndex}
+                  onChange={(e) => setPivotOpts(p => ({ ...p, rowIndex: Number(e.target.value) }))}
+                >
+                  {headers.map((h, i) => <option key={i} value={i}>{h || `Column ${i+1}`}</option>)}
+                </select>
+              </div>
+
+              <div style={{ minWidth: 200 }}>
+                <div style={{ fontSize: 12, color: pal.textMuted }}>Column field (optional)</div>
+                <select
+                  value={pivotOpts.colIndex == null ? -1 : pivotOpts.colIndex}
+                  onChange={(e) => setPivotOpts(p => ({ ...p, colIndex: Number(e.target.value) === -1 ? null : Number(e.target.value) }))}
+                >
+                  <option value={-1}>— none —</option>
+                  {headers.map((h, i) => <option key={i} value={i}>{h || `Column ${i+1}`}</option>)}
+                </select>
+              </div>
+
+              <div style={{ minWidth: 200 }}>
+                <div style={{ fontSize: 12, color: pal.textMuted }}>Value field</div>
+                <select
+                  value={pivotOpts.valueIndex}
+                  onChange={(e) => setPivotOpts(p => ({ ...p, valueIndex: Number(e.target.value) }))}
+                >
+                  {headers.map((h, i) => <option key={i} value={i}>{h || `Column ${i+1}`}</option>)}
+                </select>
+              </div>
+
+              <div style={{ minWidth: 140 }}>
+                <div style={{ fontSize: 12, color: pal.textMuted }}>Aggregation</div>
+                <select value={pivotOpts.agg} onChange={(e) => setPivotOpts(p => ({ ...p, agg: e.target.value as any }))}>
+                  <option value="sum">Sum</option>
+                  <option value="count">Count</option>
+                  <option value="avg">Average</option>
+                  <option value="min">Min</option>
+                  <option value="max">Max</option>
+                </select>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+
+      <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+        <button
+          type="button"
+          onClick={() => {
+            // build matrix from current selection (treat first row as headers)
+            const mat = rangeToMatrix(range);
+            // use data rows (include header in matrix for computePivotMatrix caller)
+            const pivotMat = computePivotMatrix(mat.slice(1), pivotOpts.rowIndex, pivotOpts.colIndex, pivotOpts.valueIndex, pivotOpts.agg);
+            setPivotPreview(pivotMat);
+          }}
+          style={{ padding: 10, borderRadius: 8, background: pal.selection, color: "#fff", border: "none", cursor: "pointer" }}
+        >
+          Preview
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            if (!pivotPreview) return alert("Preview first");
+            // paste into currently selected cell (pasteMatrix uses selectedRef.current)
+            pasteMatrix(pivotPreview);
+            setShowPivotModal(false);
+            setPivotPreview(null);
+          }}
+          style={{ padding: 10, borderRadius: 8, background: pal.surfaceAlt, color: pal.text, border: `1px solid ${pal.border}` }}
+        >
+          Insert Pivot (paste at selected cell)
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            // copy pivot to clipboard as TSV (quick alternative if user wants to paste in a new sheet)
+            if (!pivotPreview) return alert("Preview first");
+            const tsv = pivotPreview.map(r => r.join("\t")).join("\r\n");
+            navigator.clipboard?.writeText(tsv).then(() => {
+              alert("Pivot copied as TSV. You can create a new sheet and paste into A1.");
+            }).catch(() => alert("Copy to clipboard failed."));
+          }}
+          style={{ padding: 10, borderRadius: 8, background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+        >
+          Copy as TSV
+        </button>
+      </div>
+
+      {/* preview table */}
+      {pivotPreview && (
+        <div style={{ marginTop: 12, maxHeight: 280, overflow: "auto", borderTop: `1px solid ${pal.border}`, paddingTop: 8 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>Preview</div>
+          <div style={{ display: "inline-block", background: pal.surface }}>
+            {pivotPreview.map((r, ri) => (
+              <div key={ri} style={{ display: "flex" }}>
+                {r.map((c, ci) => (
+                  <div key={ci} style={{ padding: "6px 10px", border: `1px solid ${pal.border}`, minWidth: 80, boxSizing: "border-box" }}>
+                    {c}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  </div>
+)}
+// ---------- end pivot block ----------
 
       </div>
     </div>
