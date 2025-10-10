@@ -2,6 +2,9 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { evaluateAndUpdate, setCellRaw } from "../utils/formulaEngine";
 import type { CellValue } from "../utils/formulaEngine";
+import { doc, setDoc, onSnapshot } from "firebase/firestore";
+import { db } from "../firebaseConfig";
+
 
   
 
@@ -116,7 +119,6 @@ const pal = useMemo(() => getPalette(theme), [theme]);
   const selectedRef = useRef<string | null>(null);
   // inside the Sheet() component, with your other useState hooks:
 const [ribbonTab, setRibbonTab] = useState<"home" | "insert" | "view">("home");
-
 
   /** Dynamic sheet size (start from props) */
   const [rowCount, setRowCount] = useState(rows);
@@ -722,6 +724,7 @@ useEffect(() => {
 }, [effectiveKey]);
 
 
+
   /** Autosave */
   useEffect(() => {
     const payload = {
@@ -741,6 +744,37 @@ useEffect(() => {
       console.warn("Failed saving sheet to localStorage:", e);
     }
   }, [cells, colWidths, freezeTopRow, freezeFirstCol, formats, rowCount, colCount, condEnabled, effectiveKey]);
+ // 🔹 Save cell data to Firestore when it changes
+useEffect(() => {
+  if (!effectiveKey || Object.keys(cells).length === 0) return;
+
+  const ref = doc(db, "sheets", effectiveKey);
+
+  // Merge prevents overwriting other properties (e.g., formats)
+  setDoc(ref, { cells }, { merge: true }).catch((err) =>
+    console.error("🔥 Firestore save failed:", err)
+  );
+}, [cells, effectiveKey]);
+// 🔹 Listen for real-time updates from Firestore
+useEffect(() => {
+  if (!effectiveKey) return;
+
+  const ref = doc(db, "sheets", effectiveKey);
+
+  const unsubscribe = onSnapshot(ref, (snap) => {
+    const data = snap.data();
+    if (data?.cells) {
+      // Avoid infinite loops by checking difference
+      if (JSON.stringify(data.cells) !== JSON.stringify(cells)) {
+        setCells(data.cells);
+      }
+    }
+  });
+
+  return () => unsubscribe();
+}, [effectiveKey]);
+
+
 
   /** Formatting helpers */
   function toggleBold() {
