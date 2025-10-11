@@ -17,7 +17,7 @@ export default function EmailAuth({ onSignedIn, actionUrl }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   // Default action URL = current origin (works for local and production if you don't hardcode)
-  const url = actionUrl ?? `${window.location.origin}/`;
+  
 
   useEffect(() => {
     // If this page was opened by clicking the sign-in link, complete sign-in.
