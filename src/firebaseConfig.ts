@@ -6,15 +6,14 @@ import { getAnalytics, isSupported } from "firebase/analytics";
 
 // 🔐 use Vercel environment variables (Settings → Environment Variables)
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
+  apiKey: "AIzaSyANe3RYfFKKeRf4ya2llEcukPT7pNMAQYA",
+  authDomain: "excel-realtime.firebaseapp.com",
+  projectId: "excel-realtime",
+  storageBucket: "excel-realtime.firebasestorage.app",
+  messagingSenderId: "999891162837",
+  appId: "1:999891162837:web:654863c076f1ce3715745c",
+  measurementId: "G-4ZPQHFGPLS"
 };
-
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
