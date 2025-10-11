@@ -58,10 +58,9 @@ export default function EmailAuth({ onSignedIn, actionUrl }: Props) {
     setMessage(null);
     try {
       const actionCodeSettings = {
-        // The URL to redirect back to. Should be whitelisted in Firebase Console.
-        url,
-        handleCodeInApp: true,
-      };
+  url: "https://ether-x-excel-eisk-p709hxm8l-shivam-prasads-projects.vercel.app/",
+  handleCodeInApp: true,
+};
       await sendSignInLinkToEmail(auth, email, actionCodeSettings);
       // Save email to localStorage so we can complete sign-in when the user returns.
       localStorage.setItem("emailForSignIn", email);
