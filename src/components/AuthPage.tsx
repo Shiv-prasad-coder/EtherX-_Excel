@@ -1,5 +1,5 @@
 // src/components/AuthPage.tsx
-
+import React from "react";
 import PhoneAuth from "./PhoneAuth";
 
 /** Local app user shape (rename so it doesn't clash with firebase.User) */
