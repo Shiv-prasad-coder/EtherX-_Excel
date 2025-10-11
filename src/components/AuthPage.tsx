@@ -1,5 +1,5 @@
 // src/components/AuthPage.tsx
-import React from "react";
+
 import EmailAuth from "./EmailAuth";
 
 export type AppUser = {
