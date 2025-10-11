@@ -4,6 +4,9 @@ import Sheet from "./components/Sheet";
 import AuthPage from "./components/AuthPage";
 import Dashboard from "./components/Dashboard";
 import SplashScreen from "./components/SplashScreen";
+import { auth } from "./firebaseConfig";
+import { subscribeToUserSheets, saveUserSheets } from "./utils/firestoreSheets";
+
 
 type SheetMeta = {
   id: string;
@@ -146,6 +149,23 @@ const [user, setUser] = useState<User | null>(null);
 
   const activeSheet = sheets[activeIndex];
 
+useEffect(() => {
+  if (!user) return;
+  const uid = auth.currentUser?.uid ?? user.email.replace(/[^a-z0-9]/gi, "_");
+
+  const unsub = subscribeToUserSheets(uid, (data) => {
+    if (data?.sheets) setSheets(data.sheets);
+  });
+
+  return () => unsub();
+}, [user]);
+
+useEffect(() => {
+  if (!user) return;
+  const uid = auth.currentUser?.uid ?? user.email.replace(/[^a-z0-9]/gi, "_");
+  const timer = setTimeout(() => saveUserSheets(uid, { sheets }), 800);
+  return () => clearTimeout(timer);
+}, [sheets, user]);
   // Sheet actions
   const addSheet = () => {
     const meta = makeNewMeta(`Sheet${sheets.length + 1}`);
