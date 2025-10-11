@@ -1,5 +1,5 @@
 // src/components/EmailAuth.tsx
-import React, { useEffect, useState } from "react";
+
 import { sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from "firebase/auth";
 import { auth } from "../firebaseConfig"; // ensure you export `auth` from firebaseConfig
 
