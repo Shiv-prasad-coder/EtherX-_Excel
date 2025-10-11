@@ -1,8 +1,7 @@
 // src/components/AuthPage.tsx
 import React from "react";
-import PhoneAuth from "./PhoneAuth";
+import EmailAuth from "./EmailAuth";
 
-/** Local app user shape (rename so it doesn't clash with firebase.User) */
 export type AppUser = {
   name: string;
   email: string;
@@ -16,7 +15,6 @@ type Props = {
 };
 
 export default function AuthPage({ theme, onAuth, savedUser }: Props) {
-  // If savedUser exists, show quick continue button
   const continueAsSaved = () => {
     if (!savedUser) return;
     onAuth(savedUser);
@@ -47,17 +45,16 @@ export default function AuthPage({ theme, onAuth, savedUser }: Props) {
             )}
 
             <div style={{ borderRadius: 8, overflow: "hidden" }}>
-              <PhoneAuth
+              <EmailAuth
                 onSignedIn={(fbUser: any) => {
                   if (!fbUser) return;
-                  // Map firebase user fields to your app user shape.
+                  // Map firebase user to app user shape. For magic link email is primary.
                   const u: AppUser = {
-                    name: fbUser.displayName ?? fbUser.phoneNumber ?? "User",
-                    email: fbUser.email ?? "", // phone-only users may not have email
+                    name: fbUser.displayName ?? fbUser.email?.split("@")[0] ?? "User",
+                    email: fbUser.email ?? "",
                   };
                   onAuth(u);
                 }}
-                // optional: defaultPhone="+911234567890"
               />
             </div>
           </div>
