@@ -1,8 +1,10 @@
 // src/components/EmailAuth.tsx
 import { useState, useEffect } from "react";
-
-
-import { sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from "firebase/auth";
+import {
+  sendSignInLinkToEmail,
+  isSignInWithEmailLink,
+  signInWithEmailLink,
+} from "firebase/auth";
 import { auth } from "../firebaseConfig"; // ensure you export `auth` from firebaseConfig
 
 type Props = {
@@ -16,11 +18,18 @@ export default function EmailAuth({ onSignedIn, actionUrl }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Default action URL = current origin (works for local and production if you don't hardcode)
-  
+  // Default action URL = passed-in prop OR current origin
+  // using function here so it's evaluated in browser runtime (avoid SSR issues)
+  const getActionUrl = () => {
+    if (actionUrl && actionUrl.trim() !== "") return actionUrl;
+    if (typeof window !== "undefined") return window.location.origin + "/";
+    return "/"; // fallback
+  };
 
   useEffect(() => {
     // If this page was opened by clicking the sign-in link, complete sign-in.
+    if (typeof window === "undefined") return;
+
     if (isSignInWithEmailLink(auth, window.location.href)) {
       const storedEmail = localStorage.getItem("emailForSignIn") || "";
       if (!storedEmail) {
@@ -58,10 +67,12 @@ export default function EmailAuth({ onSignedIn, actionUrl }: Props) {
     setMessage(null);
     try {
       const actionCodeSettings = {
-  url: "https://ether-x-excel-eisk-p709hxm8l-shivam-prasads-projects.vercel.app/",
-  handleCodeInApp: true,
-};
+        url: getActionUrl(),
+        handleCodeInApp: true,
+      };
+
       await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+
       // Save email to localStorage so we can complete sign-in when the user returns.
       localStorage.setItem("emailForSignIn", email);
       setMessage(`A sign-in link was sent to ${email}. Check your inbox.`);
@@ -74,14 +85,16 @@ export default function EmailAuth({ onSignedIn, actionUrl }: Props) {
   }
 
   return (
-    <div style={{
-      maxWidth: 420,
-      margin: "24px auto",
-      padding: 18,
-      borderRadius: 10,
-      boxShadow: "0 6px 30px rgba(0,0,0,0.08)",
-      background: "#fff"
-    }}>
+    <div
+      style={{
+        maxWidth: 420,
+        margin: "24px auto",
+        padding: 18,
+        borderRadius: 10,
+        boxShadow: "0 6px 30px rgba(0,0,0,0.08)",
+        background: "#fff",
+      }}
+    >
       <h3 style={{ marginTop: 0 }}>Sign in with Email (magic link)</h3>
 
       <label style={{ display: "block", marginBottom: 6, fontSize: 13 }}>Email</label>
@@ -106,7 +119,7 @@ export default function EmailAuth({ onSignedIn, actionUrl }: Props) {
       {error && <div style={{ color: "red", marginTop: 12 }}>{error}</div>}
 
       <div style={{ marginTop: 14, fontSize: 13, color: "#666" }}>
-        Tip: For local testing add a Firebase test email or use a real mailbox. The sign-in link opens the app and completes sign-in.
+        Tip: For local testing add a Firebase test email (Console → Auth → Sign-in method → Email → Add test email)
       </div>
     </div>
   );
