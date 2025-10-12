@@ -104,125 +104,73 @@ export default function AuthPage({ theme = "light", onAuth, savedUser }: AuthPag
 
   // -------------------------
   // SIGNUP flow (email+password -> link phone -> complete)
-  // -------------------------
-  async function handleSignupSubmit(e?: React.FormEvent) {
-    if (e) e.preventDefault();
-    if (!name.trim() || !email || !password || !phone) {
-      return alert("Please fill name, email, password and phone number (for OTP).");
-    }
-    if (loading) return;
-    setLoading(true);
+// inside your AuthPage component (replace the previous signup handlers)
 
-    try {
-      // Create email/password user — this signs the user in immediately
-      const cred = await createUserWithEmailAndPassword(auth, email, password);
+async function sendEmailOtpToServer(email: string) {
+  const r = await fetch("/api/send-email-otp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  return r.json();
+}
 
-      // Prepare reCAPTCHA and link phone to the currently-signed-in user
-      const verifier = ensureRecaptcha();
-      if (!verifier) throw new Error("reCAPTCHA unavailable");
+async function verifyEmailOtpOnServer(email: string, code: string) {
+  const r = await fetch("/api/verify-email-otp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, code }),
+  });
+  return r.json();
+}
 
-      // linkWithPhoneNumber will send SMS to the phone and return a ConfirmationResult
-      const confirmationResult = await linkWithPhoneNumber(cred.user, phone, verifier);
-      setConfirmation(confirmationResult);
-      // advance to OTP verification step
-      setStep("verifyPhone");
-    } catch (err: any) {
-      console.error("Signup error:", err?.code, err?.message || err);
-      // If account was partially created and you want to clean it up, you could delete via Admin SDK server-side.
-      alert(err?.message ?? "Signup failed");
-      // if something went wrong after user was created and is signed in, sign them out to avoid partial states
-      try {
-        await signOut(auth);
-      } catch {
-        /* ignore */
-      }
-    } finally {
-      setLoading(false);
-    }
+// Signup: send OTP (do NOT create Firebase account yet)
+async function handleSignupSendOtp(e?: React.FormEvent) {
+  if (e) e.preventDefault();
+  if (!name.trim() || !email || !password) return alert("Please fill name, email and password");
+  if (loading) return;
+  setLoading(true);
+  try {
+    const res = await sendEmailOtpToServer(email);
+    if (!res.ok) throw new Error(res.error || "Failed to send OTP");
+    // show OTP input
+    setStep("verifyEmail");
+    alert("OTP sent to your email. Enter code to finish sign up.");
+  } catch (err: any) {
+    console.error("sendEmailOtp error:", err);
+    alert(err?.message ?? err?.error ?? "Failed to send OTP");
+  } finally {
+    setLoading(false);
   }
+}
 
-  async function handleConfirmOtp(e?: React.FormEvent) {
-    if (e) e.preventDefault();
-    if (!/^\d{4,8}$/.test(otp)) return alert("Enter the OTP you received");
-    if (!confirmation) return alert("No OTP request in progress");
-    if (loading) return;
-    setLoading(true);
-    try {
-      // Confirm the SMS code and link phone credential (confirmationResult.confirm will finish linking)
-      await confirmation.confirm(otp);
+// Verify: call server verify and then create Firebase account
+import { createUserWithEmailAndPassword, updateProfile as firebaseUpdateProfile } from "firebase/auth";
 
-      // Set displayName for nice UX
-      if (auth.currentUser) {
-        await updateProfile(auth.currentUser, { displayName: name });
-      }
-
-      // Completed — call onAuth with app user shape
-      onAuth({ name, email, password });
-    } catch (err: any) {
-      console.error("OTP confirm error:", err?.code, err?.message || err);
-      alert(err?.message ?? "Failed to confirm OTP");
-      // optional: on repeated failures you may want to sign out and cleanup
-    } finally {
-      setLoading(false);
-    }
+async function handleVerifyEmailOtp(e?: React.FormEvent) {
+  if (e) e.preventDefault();
+  if (!/^\d{6}$/.test(otp)) return alert("Enter 6-digit OTP");
+  if (loading) return;
+  setLoading(true);
+  try {
+    const res = await verifyEmailOtpOnServer(email, otp);
+    if (!res.ok) throw new Error(res.error || "OTP invalid");
+    // OTP valid — now create Firebase account
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    // set displayName
+    await firebaseUpdateProfile(cred.user, { displayName: name });
+    // success — call onAuth
+    onAuth({ name, email, password });
+  } catch (err: any) {
+    console.error("verifyEmailOtp error:", err);
+    alert(err?.message ?? err?.error ?? "Failed to verify OTP");
+  } finally {
+    setLoading(false);
   }
+}
 
-  async function handleResendOtp() {
-    if (!phone) return alert("Phone is empty");
-    if (loading) return;
-    setLoading(true);
-    try {
-      const verifier = ensureRecaptcha();
-      const currentUser = auth.currentUser;
-      if (!currentUser) throw new Error("No signed-in user to link phone to");
-      const confirmationResult = await linkWithPhoneNumber(currentUser, phone, verifier as RecaptchaVerifier);
-      setConfirmation(confirmationResult);
-      alert("OTP resent");
-    } catch (err: any) {
-      console.error("resend OTP error:", err?.code, err?.message || err);
-      alert(err?.message ?? "Failed to resend OTP");
-    } finally {
-      setLoading(false);
-    }
-  }
 
-  // -------------------------
-  // LOGIN flow (email+password) + forgot password
-  // -------------------------
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
-    if (!email || !password) return alert("Enter email and password");
-    if (loading) return;
-    setLoading(true);
-    try {
-      const { user } = await signInWithEmailAndPassword(auth, email, password);
-      onAuth({ name: user.displayName ?? email.split("@")[0], email });
-    } catch (err: any) {
-      console.error("login error:", err?.code, err?.message || err);
-      if (err?.code === "auth/wrong-password" || err?.code === "auth/user-not-found") {
-        alert("Invalid email or password.");
-      } else {
-        alert(err?.message ?? "Login failed");
-      }
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleForgotPassword() {
-    if (!email) return alert("Enter your email to reset password");
-    if (loading) return;
-    setLoading(true);
-    try {
-      await sendPasswordResetEmail(auth, email);
-      alert("Password reset email sent. Check your inbox.");
-    } catch (err: any) {
-      console.error("forgot password error:", err?.code, err?.message || err);
-      alert(err?.message ?? "Failed to send reset email");
-    } finally {
-      setLoading(false);
-    }
-  }
+ 
 
   // Styles (kept small, inline for drop-in)
   const inputStyle: React.CSSProperties = {
