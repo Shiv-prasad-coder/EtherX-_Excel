@@ -58,50 +58,66 @@ export default function AuthPage({ theme = "light", onAuth, savedUser }: AuthPag
   };
 
   // --- Email/password login
-  
-      async function doLogin(e: React.FormEvent) {
-  e.preventDefault();
-  if (!email || !password) return alert("Please enter email and password");
-  if (loading) return; // guard
-  setLoading(true);
-  try {
-    const { user } = await signInWithEmailAndPassword(auth, email, password);
-    onAuth({ name: user.displayName ?? email.split("@")[0], email });
-  } catch (err: any) {
-    // show and log full error including code
-    console.error("doLogin error:", err?.code, err?.message);
-    alert(err?.message ?? "Login failed");
-  } finally {
-    setLoading(false);
-  }
-}
-
-async function sendMagicLink(e?: React.FormEvent) {
-  if (e) {
+  async function doLogin(e: React.FormEvent) {
     e.preventDefault();
-    // stop propagation just in case
-    // @ts-ignore
-    e.stopPropagation?.();
+    if (!email || !password) return alert("Please enter email and password");
+    if (loading) return;
+    setLoading(true);
+    try {
+      const { user } = await signInWithEmailAndPassword(auth, email, password);
+      onAuth({ name: user.displayName ?? email.split("@")[0], email });
+    } catch (err: any) {
+      console.error("doLogin error:", err?.code, err?.message);
+      alert(err?.message ?? "Login failed");
+    } finally {
+      setLoading(false);
+    }
   }
-  if (!email) return alert("Enter an email to send magic link");
-  if (loading) return; // guard
-  setLoading(true);
-  try {
-    const actionCodeSettings = {
-      url: `${window.location.origin}/finishSignIn`,
-      handleCodeInApp: true,
-    };
-    await sendSignInLinkToEmail(auth, email, actionCodeSettings);
-    window.localStorage.setItem("emailForSignIn", email);
-    alert("Magic link sent — check your email and click the link to complete sign-in.");
-  } catch (err: any) {
-    console.error("sendMagicLink error:", err?.code, err?.message);
-    alert(err?.message ?? "Failed to send magic link");
-  } finally {
-    setLoading(false);
-  }
-}
 
+  // --- Signup (create account) using email/password
+  async function doSignup(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    if (!name.trim() || !email || !password) return alert("Please fill name, email and password");
+    if (loading) return;
+    setLoading(true);
+    try {
+      // create account and then call onAuth
+      await createUserWithEmailAndPassword(auth, email, password);
+      // optionally you can call updateProfile here to set displayName
+      onAuth({ name, email, password });
+    } catch (err: any) {
+      console.error("doSignup error:", err?.code, err?.message);
+      alert(err?.message ?? "Signup failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // --- Magic link (email) send
+  async function sendMagicLink(e?: React.FormEvent) {
+    if (e) {
+      e.preventDefault();
+      // @ts-ignore
+      e.stopPropagation?.();
+    }
+    if (!email) return alert("Enter an email to send magic link");
+    if (loading) return;
+    setLoading(true);
+    try {
+      const actionCodeSettings = {
+        url: `${window.location.origin}/finishSignIn`, // MUST be allowlisted in Firebase Console
+        handleCodeInApp: true,
+      };
+      await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+      window.localStorage.setItem("emailForSignIn", email);
+      alert("Magic link sent — check your email and click the link to complete sign-in.");
+    } catch (err: any) {
+      console.error("sendMagicLink error:", err?.code, err?.message);
+      alert(err?.message ?? "Failed to send magic link");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   // OTP UI handler (keeps original OTP step but user needs to wire phone auth if desired)
   function verifyAndSignup(e: React.FormEvent) {
@@ -162,73 +178,21 @@ async function sendMagicLink(e?: React.FormEvent) {
             <button onClick={continueAsSaved} style={{ padding: "8px 12px", marginRight: 8, borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", cursor: "pointer" }}>Continue as {savedUser.name}</button>
           </div>}
 
-         // inside your AuthPage component (replace the LOGIN form block)
+          {/* LOGIN */}
+          {step === "login" && !isSignup && (
+            <form onSubmit={doLogin} style={{ marginTop: 18, display: "grid", gap: 14 }}>
+              <input type="email" placeholder="Email address" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" style={inputStyle} />
+              <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" style={inputStyle} />
+              <button type="submit" style={mainButtonStyle} onMouseEnter={(e) => (e.currentTarget.style.background = C.btnHover)} onMouseLeave={(e) => (e.currentTarget.style.background = C.btn)} disabled={loading}>{loading ? "Signing in..." : "Login"}</button>
 
-{step === "login" && !isSignup && (
-  <form onSubmit={doLogin} style={{ marginTop: 18, display: "grid", gap: 14 }}>
-    <input
-      type="email"
-      placeholder="Email address"
-      value={email}
-      onChange={(e) => setEmail(e.target.value)}
-      autoComplete="email"
-      style={inputStyle}
-    />
-    <input
-      type="password"
-      placeholder="Password"
-      value={password}
-      onChange={(e) => setPassword(e.target.value)}
-      autoComplete="current-password"
-      style={inputStyle}
-    />
-    <button
-      type="submit"
-      style={mainButtonStyle}
-      onMouseEnter={(e) => (e.currentTarget.style.background = C.btnHover)}
-      onMouseLeave={(e) => (e.currentTarget.style.background = C.btn)}
-      disabled={loading}
-    >
-      {loading ? "Signing in..." : "Login"}
-    </button>
+              {/* IMPORTANT: keep type="button" so this DOES NOT submit the form */}
+              <button type="button" onClick={async (ev) => { ev.stopPropagation(); if (loading) return; await sendMagicLink(); }} style={{ ...secondaryButtonStyle, marginTop: 6 }} disabled={loading}>
+                {loading ? "Sending..." : "Sign in with Magic Link"}
+              </button>
 
-    {/* IMPORTANT: keep type="button" so this DOES NOT submit the form */}
-    <button
-      type="button"
-      onClick={async (ev) => {
-        // stop propagation (safety) and guard against double calls
-        ev.stopPropagation();
-        if (loading) return;
-        await sendMagicLink();
-      }}
-      style={{ ...secondaryButtonStyle, marginTop: 6 }}
-      disabled={loading}
-    >
-      {loading ? "Sending..." : "Sign in with Magic Link"}
-    </button>
-
-    <button
-      type="button"
-      onClick={() => {
-        setIsSignup(true);
-        setStep("signup");
-      }}
-      style={{
-        background: "transparent",
-        border: "none",
-        color: "#60a5fa",
-        cursor: "pointer",
-        textDecoration: "underline",
-        fontWeight: 500,
-        marginTop: 2,
-      }}
-      disabled={loading}
-    >
-      Create a new account
-    </button>
-  </form>
-)}
-
+              <button type="button" onClick={() => { setIsSignup(true); setStep("signup"); }} style={{ background: "transparent", border: "none", color: "#60a5fa", cursor: "pointer", textDecoration: "underline", fontWeight: 500, marginTop: 2 }} disabled={loading}>Create a new account</button>
+            </form>
+          )}
 
           {/* SIGNUP */}
           {step === "signup" && (
@@ -237,7 +201,7 @@ async function sendMagicLink(e?: React.FormEvent) {
               <input type="email" placeholder="Email address" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" style={inputStyle} />
               <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" style={inputStyle} />
               <button type="submit" style={mainButtonStyle} onMouseEnter={(e) => (e.currentTarget.style.background = C.btnHover)} onMouseLeave={(e) => (e.currentTarget.style.background = C.btn)} disabled={loading}>{loading ? "Creating..." : "Create account"}</button>
-              <button type="button" onClick={() => { setIsSignup(false); setStep("login"); }} style={{ background: "transparent", border: "none", color: "#60a5fa", cursor: "pointer", textDecoration: "underline", fontWeight: 500, marginTop: 2 }}>Back to sign in</button>
+              <button type="button" onClick={() => { setIsSignup(false); setStep("login"); }} style={{ background: "transparent", border: "none", color: "#60a5fa", cursor: "pointer", textDecoration: "underline", fontWeight: 500, marginTop: 2 }} disabled={loading}>Back to sign in</button>
             </form>
           )}
 
@@ -247,8 +211,8 @@ async function sendMagicLink(e?: React.FormEvent) {
               <label style={{ fontSize: 14, color: C.text }}>Enter OTP</label>
               <input inputMode="numeric" maxLength={6} placeholder="000000" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))} style={inputStyle} />
               <div style={{ fontSize: 13, color: C.sub }}>OTP sent to <span style={{ color: isDark ? "#e5e7eb" : "#111827" }}>{email}</span></div>
-              <button type="submit" style={{ ...mainButtonStyle, background: "#9ca3af", cursor: "pointer" }} onMouseEnter={(e) => (e.currentTarget.style.background = "#6b7280")} onMouseLeave={(e) => (e.currentTarget.style.background = "#9ca3af")}>Verify & Sign Up</button>
-              <button type="button" onClick={() => setStep("signup")} style={secondaryButtonStyle}>Back</button>
+              <button type="submit" style={{ ...mainButtonStyle, background: "#9ca3af", cursor: "pointer" }} onMouseEnter={(e) => (e.currentTarget.style.background = "#6b7280")} onMouseLeave={(e) => (e.currentTarget.style.background = "#9ca3af")} disabled={loading}>Verify & Sign Up</button>
+              <button type="button" onClick={() => setStep("signup")} style={secondaryButtonStyle} disabled={loading}>Back</button>
             </form>
           )}
         </div>
