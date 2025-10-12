@@ -1,6 +1,11 @@
 // src/components/AuthPage.tsx
 import { useMemo, useState } from "react";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendSignInLinkToEmail } from "firebase/auth";
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendSignInLinkToEmail,
+} from "firebase/auth";
 import logoLight from "../assets/logo_light.png";
 import logoDark from "../assets/logo_dark.png";
 
@@ -22,18 +27,21 @@ export default function AuthPage({ theme = "light", onAuth, savedUser }: AuthPag
   const isDark = theme === "dark";
   const auth = getAuth();
 
-  const C = useMemo(() => ({
-    bg: isDark ? "#000000" : "#f8fafc",
-    card: isDark ? "#000000" : "#ffffff",
-    text: isDark ? "#eaeaea" : "#0f172a",
-    sub: isDark ? "#b4b4b4" : "#64748b",
-    border: isDark ? "#1a1a1a" : "#e5e7eb",
-    inputBg: isDark ? "#121212" : "#ffffff",
-    inputBorder: isDark ? "#2a2a2a" : "#d1d5db",
-    btn: "#2563eb",
-    btnHover: "#1d4ed8",
-    btnMuted: isDark ? "#1a1a1a" : "#f1f5f9",
-  }), [isDark]);
+  const C = useMemo(
+    () => ({
+      bg: isDark ? "#000000" : "#f8fafc",
+      card: isDark ? "#000000" : "#ffffff",
+      text: isDark ? "#eaeaea" : "#0f172a",
+      sub: isDark ? "#b4b4b4" : "#64748b",
+      border: isDark ? "#1a1a1a" : "#e5e7eb",
+      inputBg: isDark ? "#121212" : "#ffffff",
+      inputBorder: isDark ? "#2a2a2a" : "#d1d5db",
+      btn: "#2563eb",
+      btnHover: "#1d4ed8",
+      btnMuted: isDark ? "#1a1a1a" : "#f1f5f9",
+    }),
+    [isDark]
+  );
 
   // steps + form state
   const [step, setStep] = useState<Step>("login");
@@ -55,8 +63,8 @@ export default function AuthPage({ theme = "light", onAuth, savedUser }: AuthPag
     if (!email || !password) return alert("Please enter email and password");
     setLoading(true);
     try {
-      const res = await signInWithEmailAndPassword(auth, email, password);
-      onAuth({ name: res.user.displayName ?? email.split("@")[0], email });
+      const { user } = await signInWithEmailAndPassword(auth, email, password);
+      onAuth({ name: user.displayName ?? email.split("@")[0], email });
     } catch (err: any) {
       alert(err.message ?? "Login failed");
     } finally {
@@ -70,8 +78,9 @@ export default function AuthPage({ theme = "light", onAuth, savedUser }: AuthPag
     if (!name.trim() || !email || !password) return alert("Please fill name, email and password");
     setLoading(true);
     try {
-      const res = await createUserWithEmailAndPassword(auth, email, password);
-      // optional: update displayName via updateProfile if you want
+      // create account; we don't need the returned value for now so don't assign it
+      await createUserWithEmailAndPassword(auth, email, password);
+      // You can optionally update profile displayName here if you wish.
       onAuth({ name, email, password });
     } catch (err: any) {
       alert(err.message ?? "Signup failed");
@@ -86,13 +95,11 @@ export default function AuthPage({ theme = "light", onAuth, savedUser }: AuthPag
     if (!email) return alert("Enter an email to send magic link");
     setLoading(true);
     try {
-      // actionCodeSettings.url must be allowlisted in Firebase Authorized domains
       const actionCodeSettings = {
         url: `${window.location.origin}/finishSignIn`, // MUST be allowlisted in Firebase Console
         handleCodeInApp: true,
       };
       await sendSignInLinkToEmail(auth, email, actionCodeSettings);
-      // Save email locally so finishSignIn can use it
       window.localStorage.setItem("emailForSignIn", email);
       alert("Magic link sent — check your email and click the link to complete sign-in.");
     } catch (err: any) {
