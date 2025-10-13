@@ -22,87 +22,71 @@ interface AuthPageProps {
 type Step = "login" | "signup" | "otp";
 
 /**
- * Client-only Firebase initialization helper (no new files).
- * This safely initializes Firebase only if running in browser and env vars exist.
+ * Allow usage of `process.env` in the browser TS build without adding @types/node.
+ * This is simply a compile-time declaration that `process` exists at runtime
+ * (it will be inlined by the bundler at build-time for CRA/Vite/Next).
+ */
+declare const process: any;
+
+/**
+ * Client-only Firebase initialization helper (no extra files).
+ * Initializes Firebase only when running in the browser and when required env vars were provided.
  */
 let _fbApp: FirebaseApp | null = null;
-function getFirebaseConfigFromEnv(): Record<string, string | undefined> {
-  // support CRA (REACT_APP_), Next.js (NEXT_PUBLIC_), Vite (VITE_)
-  const prefixes = ["REACT_APP_", "NEXT_PUBLIC_", "VITE_"];
-  const keys = ["FIREBASE_API_KEY", "FIREBASE_AUTH_DOMAIN", "FIREBASE_PROJECT_ID", "FIREBASE_APP_ID", "FIREBASE_MESSAGING_SENDER_ID", "FIREBASE_STORAGE_BUCKET"];
-  const found: Record<string, string | undefined> = {};
-  for (const k of keys) {
-    for (const p of prefixes) {
-      const value = (process.env as any)[p + k];
-      if (value) {
-        found[k.toLowerCase()] = value;
-        break;
-      }
-    }
-    // if not found, keep undefined
-    if (!(k.toLowerCase() in found)) found[k.toLowerCase()] = undefined;
-  }
-  return found;
-}
 
 function getFirebaseApp(): FirebaseApp | null {
-  if (typeof window === "undefined") return null; // server: don't init
+  if (typeof window === "undefined") return null; // avoid server-side init
   if (_fbApp) return _fbApp;
 
-  const cfgParts = getFirebaseConfigFromEnv();
-  const apiKey = cfgParts["firebase_api_key".replace("firebase_", "")] ?? cfgParts["api_key"] ?? cfgParts["api_key"]; // defensive but we will instead map explicitly below
-
-  // Build config more reliably:
+  // Read environment variables that should be injected at build time.
+  // Ensure you set these in Vercel with the same names you use locally.
   const config = {
     apiKey:
-      (process.env.REACT_APP_FIREBASE_API_KEY as string | undefined) ??
-      (process.env.NEXT_PUBLIC_FIREBASE_API_KEY as string | undefined) ??
-      (process.env.VITE_FIREBASE_API_KEY as string | undefined) ??
-      (process.env.REACT_APP_FIREBASE_APIKEY as string | undefined) ??
+      process?.env?.REACT_APP_FIREBASE_API_KEY ??
+      process?.env?.NEXT_PUBLIC_FIREBASE_API_KEY ??
+      process?.env?.VITE_FIREBASE_API_KEY ??
       undefined,
     authDomain:
-      (process.env.REACT_APP_FIREBASE_AUTH_DOMAIN as string | undefined) ??
-      (process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN as string | undefined) ??
-      (process.env.VITE_FIREBASE_AUTH_DOMAIN as string | undefined) ??
+      process?.env?.REACT_APP_FIREBASE_AUTH_DOMAIN ??
+      process?.env?.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ??
+      process?.env?.VITE_FIREBASE_AUTH_DOMAIN ??
       undefined,
     projectId:
-      (process.env.REACT_APP_FIREBASE_PROJECT_ID as string | undefined) ??
-      (process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID as string | undefined) ??
-      (process.env.VITE_FIREBASE_PROJECT_ID as string | undefined) ??
+      process?.env?.REACT_APP_FIREBASE_PROJECT_ID ??
+      process?.env?.NEXT_PUBLIC_FIREBASE_PROJECT_ID ??
+      process?.env?.VITE_FIREBASE_PROJECT_ID ??
       undefined,
     storageBucket:
-      (process.env.REACT_APP_FIREBASE_STORAGE_BUCKET as string | undefined) ??
-      (process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET as string | undefined) ??
-      (process.env.VITE_FIREBASE_STORAGE_BUCKET as string | undefined) ??
+      process?.env?.REACT_APP_FIREBASE_STORAGE_BUCKET ??
+      process?.env?.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ??
+      process?.env?.VITE_FIREBASE_STORAGE_BUCKET ??
       undefined,
     messagingSenderId:
-      (process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID as string | undefined) ??
-      (process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID as string | undefined) ??
-      (process.env.VITE_FIREBASE_MESSAGING_SENDER_ID as string | undefined) ??
+      process?.env?.REACT_APP_FIREBASE_MESSAGING_SENDER_ID ??
+      process?.env?.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ??
+      process?.env?.VITE_FIREBASE_MESSAGING_SENDER_ID ??
       undefined,
     appId:
-      (process.env.REACT_APP_FIREBASE_APP_ID as string | undefined) ??
-      (process.env.NEXT_PUBLIC_FIREBASE_APP_ID as string | undefined) ??
-      (process.env.VITE_FIREBASE_APP_ID as string | undefined) ??
+      process?.env?.REACT_APP_FIREBASE_APP_ID ??
+      process?.env?.NEXT_PUBLIC_FIREBASE_APP_ID ??
+      process?.env?.VITE_FIREBASE_APP_ID ??
       undefined,
   };
 
-  // Minimal guard: require apiKey and projectId (adjust if you want less strict)
+  // Require at least apiKey and projectId to initialize
   if (!config.apiKey || !config.projectId) {
-    // helpful debug: prints at runtime in browser console
     // eslint-disable-next-line no-console
-    console.warn("Firebase config missing or incomplete. Skipping initializeApp().", {
+    console.warn("Firebase config missing or incomplete — skipping initializeApp()", {
       apiKey: !!config.apiKey,
       projectId: !!config.projectId,
-      // Do not print actual keys in prod logs
     });
     return null;
   }
 
   try {
-    _fbApp = initializeApp(config);
+    _fbApp = initializeApp(config as any);
     // eslint-disable-next-line no-console
-    console.info("Firebase initialized (client).");
+    console.info("Firebase initialized on client.");
     return _fbApp;
   } catch (err) {
     // eslint-disable-next-line no-console
@@ -122,8 +106,6 @@ function getAuthSafe(): Auth | null {
     return null;
   }
 }
-
-/* ----------------- Component ----------------- */
 
 export default function AuthPage({ theme, onAuth, savedUser }: AuthPageProps) {
   const isDark = theme === "dark";
@@ -153,8 +135,11 @@ export default function AuthPage({ theme, onAuth, savedUser }: AuthPageProps) {
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Ensure a plain string is provided to ActionCodeSettings.url (Firebase types require string)
+  const urlForAction = typeof window !== "undefined" && window.location?.origin ? window.location.origin : "";
+
   const actionCodeSettings = {
-    url: typeof window !== "undefined" ? window.location.origin : undefined,
+    url: urlForAction as string,
     handleCodeInApp: true,
   };
 
@@ -164,7 +149,7 @@ export default function AuthPage({ theme, onAuth, savedUser }: AuthPageProps) {
     const href = window.location.href;
     const auth = getAuthSafe();
     if (!auth) {
-      // firebase not configured — nothing to do
+      // Firebase not configured — nothing to do
       return;
     }
 
@@ -240,8 +225,7 @@ export default function AuthPage({ theme, onAuth, savedUser }: AuthPageProps) {
     try {
       const auth = getAuthSafe();
       if (!auth) {
-        // If Firebase not configured, fallback to app-local onAuth() with simple behavior:
-        // (use this only if you intentionally want a no-Firebase fallback)
+        // If Firebase not configured, fallback to app-local onAuth() behavior
         onAuth({ name: name || email.split("@")[0], email, password });
         setLoading(false);
         return;
@@ -267,8 +251,7 @@ export default function AuthPage({ theme, onAuth, savedUser }: AuthPageProps) {
   function verifyAndSignup(e: React.FormEvent) {
     e.preventDefault();
     if (!/^\d{6}$/.test(otp)) return alert("Enter a 6-digit OTP");
-    // Note: OTP flow not backed by Firebase here; placeholder for your own OTP service.
-    // Proceed to local create user behavior (persist in localStorage via parent onAuth)
+    // Note: OTP flow here is a placeholder; integrate your OTP provider if needed.
     onAuth({ name, email, password });
   }
 
