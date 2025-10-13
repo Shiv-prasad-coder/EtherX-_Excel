@@ -2,7 +2,7 @@
 // src/components/AuthPage.tsx
 import React, { useMemo, useState, useRef, useEffect } from "react";
 import { getAuth, RecaptchaVerifier, /* ... */ } from "firebase/auth";
-const auth = getAuth();
+
 
 import {
   getAuth,
@@ -17,7 +17,7 @@ import type { ConfirmationResult } from "firebase/auth";
 
 import logoLight from "../assets/logo_light.png";
 import logoDark from "../assets/logo_dark.png";
-
+const auth = getAuth();
 export type AppUser = {
   name: string;
   email: string;
