@@ -558,6 +558,48 @@ function insertCurrentDateTime(includeTime: boolean) {
     setCells({});
     try { localStorage.removeItem(effectiveKey); } catch {}
   }
+// wire global toolbar events (import / download / clear) -> local sheet handlers
+useEffect(() => {
+  const onImport = async () => {
+    // open file picker inside sheet so importCSV is used
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".csv,text/csv";
+    input.onchange = async () => {
+      const f = input.files?.[0];
+      if (!f) return;
+      const text = await f.text();
+      importCSV(text);
+    };
+    input.click();
+  };
+
+  const onDownload = () => {
+    try {
+      const csv = cellsToCSV();
+      const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+      downloadCSV(`sheet-${ts}.csv`, csv);
+    } catch (err) {
+      console.warn("Download CSV failed:", err);
+    }
+  };
+
+  const onClear = () => {
+    // call the sheet's clear function (it already confirms)
+    clearSheet();
+  };
+
+  window.addEventListener("sheet-import-csv", onImport);
+  window.addEventListener("sheet-download-csv", onDownload);
+  window.addEventListener("sheet-clear", onClear);
+
+  return () => {
+    window.removeEventListener("sheet-import-csv", onImport);
+    window.removeEventListener("sheet-download-csv", onDownload);
+    window.removeEventListener("sheet-clear", onClear);
+  };
+// eslint-disable-next-line react-hooks/exhaustive-deps
+}, []); // no deps so it mounts once per sheet instance
 
   /** Auto-fit + column resize */
   const measureCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1353,22 +1395,35 @@ try {
   outlineOffset: -2,
 }}
 
-      >
-        {editing === id ? (
-          <input
-            autoFocus
-            style={{ width: "100%", height: "100%", border: "none", outline: "none", fontSize: 13, textAlign }}
-            value={formulaBar}
-            onChange={(e) => setFormulaBar(e.target.value)}
-            onBlur={() => commitEdit(id, formulaBar)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") commitEdit(id, formulaBar);
-              else if (e.key === "Escape") { setEditing(null); setFormulaBar(""); }
-            }}
-          />
-        ) : (
-          <span>{displayText as any}</span>
-        )}
+      >{editing === id ? (
+  <input
+    autoFocus
+    value={formulaBar}
+    onChange={(e) => setFormulaBar(e.target.value)}
+    onBlur={() => commitEdit(id, formulaBar)}
+    onKeyDown={(e) => {
+      if (e.key === "Enter") commitEdit(id, formulaBar);
+      else if (e.key === "Escape") { setEditing(null); setFormulaBar(""); }
+    }}
+    style={{
+      width: "100%",
+      height: "100%",
+      border: "none",
+      outline: "none",
+      fontSize: 13,
+      padding: 0,
+      margin: 0,
+      textAlign,
+      background: "transparent",          // don't draw white background
+      color: pal.text,                    // ensure text color visible in dark/light
+      caretColor: pal.selection,          // nice caret color
+      WebkitTextFillColor: pal.text,      // Safari fix
+    }}
+  />
+) : (
+  <span>{displayText as any}</span>
+)}
+
 
         {/* Fill handle */}
         {isSelected && editing !== id && (
@@ -1480,154 +1535,266 @@ const currentFmt =
         >
           {`${sheetName}${selectedRef.current ? ` • ${selectedRef.current}` : ""}`}
         </span>
+{/* Polished thin formula bar */}
+<div
+  className={`formula-bar formula-bar--thin`}
+  role="search"
+  aria-label="Formula bar"
+  title="Type value or =formula"
+ style={{
+  background: pal.surface,
+  color: pal.text,
+  border: `1px solid ${pal.border}`,
+  padding: "8px 10px",
+  borderRadius: 8,
+  height: 34,
+  caretColor: pal.selection,
+}}
+>
+  {/* fx icon */}
+  <span className="formula-icon" aria-hidden>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+      <path d="M4 6h16M4 12h12M4 18h16" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M14 6l6 6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  </span>
 
-        <input
-          className="toolbar-input flex-1 min-w-[260px]"
-          style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-          value={formulaBar}
-          onChange={(e) => setFormulaBar(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && selectedRef.current) {
-              commitEdit(selectedRef.current, formulaBar);
-            }
-          }}
-          placeholder="Type value or =formula"
-        />
+  <input
+    type="text"
+    placeholder="Type value or =formula"
+    value={formulaBar}
+    onChange={(e) => setFormulaBar(e.target.value)}
+    onKeyDown={(e) => {
+      if (e.key === "Enter" && selectedRef.current) {
+        commitEdit(selectedRef.current, formulaBar);
+      } else if (e.key === "Escape") {
+        // restore the cell's raw value (or clear if none)
+        const id = selectedRef.current ?? "A1";
+        setFormulaBar(cells[id]?.raw ?? (cells[id]?.value != null ? String(cells[id].value) : ""));
+        setEditing(null);
+      }
+    }}
+    onBlur={() => {
+      if (editing && selectedRef.current) commitEdit(selectedRef.current, formulaBar);
+    }}
+    aria-label="Formula input"
+  />
 
-        {/* B) Import / Export / Clear (unchanged) */}
-        <div className="flex items-center gap-2">
-          <button
-            className="toolbar-btn"
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            onClick={() => {
-              const input = document.createElement("input");
-              input.type = "file"; input.accept = ".csv,text/csv";
-              input.onchange = async () => {
-                const f = input.files?.[0]; if (!f) return;
-                importCSV(await f.text());
-              };
-              input.click();
-            }}
-          >
-            Import CSV
-          </button>
+  {/* right-side action: commit if editing else clear */}
+  <button
+    type="button"
+    className="formula-action"
+    aria-label={editing ? "Apply formula" : "Clear formula"}
+    title={editing ? "Apply" : "Clear"}
+    onClick={() => {
+      if (editing && selectedRef.current) {
+        commitEdit(selectedRef.current, formulaBar);
+      } else {
+        setFormulaBar("");
+      }
+    }}
+  >
+    {editing ? (
+      // check icon when editing
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+        <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    ) : (
+      // x icon when not editing
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+        <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    )}
+  </button>
+</div>
 
-          <button
-            className="toolbar-btn"
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            onClick={() => {
-              const csv = cellsToCSV();
-              const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g, "-");
-              downloadCSV(`sheet-${ts}.csv`, csv);
-            }}
-          >
-            Download CSV
-          </button>
-
-          <button
-            className="toolbar-btn"
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            onClick={clearSheet}
-          >
-            Clear Sheet
-          </button>
-        </div>
-
-        <span className="toolbar-sep" />
 
         {/* C) Freeze + Insert/Delete + Conditional Format (unchanged) */}
         <div className="flex items-center gap-2">
           <button
-            className={`toolbar-btn ${freezeTopRow ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300" : ""}`}
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            onClick={() => { pushHistory(); setFreezeTopRow(v => !v); }}
-          >
-            {freezeTopRow ? "Unfreeze Top Row" : "Freeze Top Row"}
-          </button>
+  className={`toolbar-btn toolbar-btn--ghost ${
+    freezeTopRow ? "toolbar-btn--active toggle-animate" : ""
+  }`}
+  title={freezeTopRow ? "Unfreeze Top Row" : "Freeze Top Row"}
+  aria-pressed={freezeTopRow}
+  onClick={() => {
+    pushHistory();
+    setFreezeTopRow((v) => !v);
+  }}
+>
+  {freezeTopRow ? "Unfreeze Top Row" : "Freeze Top Row"}
+</button>
 
           <button
-            onClick={() => setShowCondModal(true)}
-            style={{
-              padding: "6px 10px",
-              borderRadius: 6,
-              cursor: "pointer",
-              border: `1px solid ${pal.border}`,
-              background: pal.surface,
-              color: pal.text,
-            }}
-          >
-            Conditional Format
-          </button>
+  className={`toolbar-btn toolbar-btn--ghost ${
+    freezeFirstCol ? "toolbar-btn--active toggle-animate" : ""
+  }`}
+  title={freezeFirstCol ? "Unfreeze First Column" : "Freeze First Column"}
+  aria-pressed={freezeFirstCol}
+  onClick={() => {
+    pushHistory();
+    setFreezeFirstCol((v) => !v);
+  }}
+>
+  {freezeFirstCol ? "Unfreeze Column" : "Freeze Column"}
+</button>
+<button
+  id="cond-btn"
+  className={`toolbar-btn toolbar-btn--cond ${rules.length || showCondModal ? "toolbar-btn--active toggle-animate" : ""}`}
+  title="Conditional Format"
+  aria-haspopup="dialog"
+  aria-expanded={!!showCondModal}
+  aria-controls="cond-modal"
+  onClick={() => setShowCondModal((s) => !s)} // toggle now
+>
+  {rules.length > 0 && <span className="cond-badge">{rules.length}</span>}
+
+  Conditional Format
+
+</button>
+<div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+   <button
+    type="button"
+    className="toolbar-btn toolbar-btn--danger"
+    onClick={() => {
+      // confirm and clear rules + disable conditional formatting
+      const ok = confirm("Turn off conditional formatting for this sheet? This will remove all conditional rules.");
+      if (!ok) return;
+      setRules([]);
+      setCondEnabled(false);
+      setShowCondModal(false);
+    }}
+    title="Turn off conditional formatting (removes all rules)"
+  >
+    Turn off
+  </button>
+</div>
+
 
           <button
-            className={`toolbar-btn ${freezeFirstCol ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300" : ""}`}
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            onClick={() => { pushHistory(); setFreezeFirstCol(v => !v); }}
-          >
-            {freezeFirstCol ? "Unfreeze First Column" : "Freeze First Column"}
-          </button>
-
-          <button
-            className="toolbar-btn"
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            title="+ Row"
+            className="toolbar-btn toolbar-btn--primary" title="+ Row"
             onClick={() => { const p = anchorRC(); if (!p) return; insertRowAt(p.row); }}
           >
             + Row
           </button>
+<button
+  className="toolbar-btn toolbar-btn--danger"
+  title="− Row"
+  onClick={() => {
+    const p = anchorRC();
+    if (!p) return;
+    deleteRowAt(p.row);
+  }}
+>
+  − Row
+</button>
+
 
           <button
-            className="toolbar-btn bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300"
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            title="− Row"
-            onClick={() => { const p = anchorRC(); if (!p) return; deleteRowAt(p.row); }}
-          >
-            − Row
-          </button>
-
-          <button
-            className="toolbar-btn"
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            title="+ Col"
+            className="toolbar-btn toolbar-btn--primary" title="+ Col"
             onClick={() => { const p = anchorRC(); if (!p) return; insertColAt(p.col); }}
           >
             + Col
           </button>
 
-          <button
-            className="toolbar-btn bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300"
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            title="− Col"
-            onClick={() => { const p = anchorRC(); if (!p) return; deleteColAt(p.col); }}
-          >
-            − Col
-          </button>
+         <button
+  className="toolbar-btn toolbar-btn--danger"
+  title="− Column"
+  onClick={() => {
+    const p = anchorRC();
+    if (!p) return;
+    deleteColAt(p.col);
+  }}
+>
+  − Column
+</button>
+
         </div>
 
         <span className="toolbar-sep" />
 
-        {/* D) Text formatting (unchanged) */}
-        <div className="flex items-center gap-2">
-          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} title="Bold" onClick={toggleBold}>B</button>
-          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} title="Italic" onClick={toggleItalic}><i>I</i></button>
-          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} title="Align Left"   onClick={() => setAlign("left")}>⟸</button>
-          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} title="Align Center" onClick={() => setAlign("center")}>≡</button>
-          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} title="Align Right"  onClick={() => setAlign("right")}>⟹</button>
+        {/* D) Text formatting (updated) */}
+{(() => {
+  const sel = selectedRef.current;
+  const isBold = !!(sel && formats[sel]?.bold);
+  const isItalic = !!(sel && formats[sel]?.italic);
+  const curAlign = (sel && (formats[sel]?.align as "left" | "center" | "right")) || "left";
 
-          <label className="text-xs flex items-center gap-1.5">
-            <span>Fill</span>
-            <input type="color" className="h-8 w-10 rounded-md border border-slate-300 dark:border-slate-700"
-              onChange={(e) => setBg(e.target.value)} />
-          </label>
+  return (
+    <div className="flex items-center gap-2">
+      {/* Bold */}
+      <button
+        className={`toolbar-btn toolbar-btn--text ${isBold ? "toolbar-btn--active toggle-animate" : ""}`}
+        title="Bold (Ctrl+B)"
+        aria-pressed={isBold}
+        onClick={() => toggleBold()}
+      >
+        <strong style={{ fontSize: 13, lineHeight: "12px" }}>B</strong>
+      </button>
 
-          <label className="text-xs flex items-center gap-1.5">
-            <span>Text</span>
-            <input type="color" className="h-8 w-10 rounded-md border border-slate-300 dark:border-slate-700"
-              onChange={(e) => setColor(e.target.value)} />
-          </label>
-        </div>
+      {/* Italic */}
+      <button
+        className={`toolbar-btn toolbar-btn--text ${isItalic ? "toolbar-btn--active toggle-animate" : ""}`}
+        title="Italic (Ctrl+I)"
+        aria-pressed={isItalic}
+        onClick={() => toggleItalic()}
+      >
+        <i style={{ fontStyle: "italic", fontSize: 13 }}>I</i>
+      </button>
 
-        <span className="toolbar-sep" />
+      {/* Align Left */}
+      <button
+        className={`toolbar-btn toolbar-btn--text ${curAlign === "left" ? "toolbar-btn--active toggle-animate" : ""}`}
+        title="Align Left"
+        aria-pressed={curAlign === "left"}
+        onClick={() => setAlign("left")}
+      >
+        ⟸
+      </button>
+
+      {/* Align Center */}
+      <button
+        className={`toolbar-btn toolbar-btn--text ${curAlign === "center" ? "toolbar-btn--active toggle-animate" : ""}`}
+        title="Align Center"
+        aria-pressed={curAlign === "center"}
+        onClick={() => setAlign("center")}
+      >
+        ≡
+      </button>
+
+      {/* Align Right */}
+      <button
+        className={`toolbar-btn toolbar-btn--text ${curAlign === "right" ? "toolbar-btn--active toggle-animate" : ""}`}
+        title="Align Right"
+        aria-pressed={curAlign === "right"}
+        onClick={() => setAlign("right")}
+      >
+        ⟹
+      </button>
+
+      <label className="text-xs flex items-center gap-1.5">
+        <span>Fill</span>
+        <input
+          type="color"
+          className="h-8 w-10 rounded-md border border-slate-300 dark:border-slate-700"
+          onChange={(e) => setBg(e.target.value)}
+        />
+      </label>
+
+      <label className="text-xs flex items-center gap-1.5">
+        <span>Text</span>
+        <input
+          type="color"
+          className="h-8 w-10 rounded-md border border-slate-300 dark:border-slate-700"
+          onChange={(e) => setColor(e.target.value)}
+        />
+      </label>
+    </div>
+  );
+})()}
+
+<span className="toolbar-sep" />
+
 
         {/* E) Number format (General/Number/Currency/Percent/Date) (unchanged) */}
         <div className="flex items-center gap-2">
@@ -1706,23 +1873,76 @@ const currentFmt =
       padding: 8,
     }}
   >
-    {/* Formula bar — still visible inside insert tab, mirrors grid selection */}
-    <input
-      className="toolbar-input flex-1 min-w-[260px]"
-      style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-      value={formulaBar}
-      onChange={(e) => setFormulaBar(e.target.value)}
-      onKeyDown={(e) => {
-        // Prevent accidental form submit and commit only when Enter is pressed
-        if (e.key === "Enter") {
-          e.preventDefault();
-          const sel = selectedRef.current;
-          if (sel) commitEdit(sel, formulaBar);
-        }
-      }}
-      placeholder="Type value or =formula"
-      aria-label="Formula bar"
-    />
+ <div
+  className="formula-bar formula-bar--thin"
+  style={{ background: pal.surface, color: pal.text, borderColor: pal.border }}
+>
+  {/* fx icon */}
+  <span className="formula-icon" aria-hidden>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M4 6h16M4 12h12M4 18h16"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M14 6l6 6"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  </span>
+
+  {/* main input */}
+  <input
+    type="text"
+    placeholder="Type value or =formula"
+    value={formulaBar}
+    onChange={(e) => setFormulaBar(e.target.value)}
+    onKeyDown={(e) => {
+      if (e.key === "Enter" && selectedRef.current) {
+        commitEdit(selectedRef.current, formulaBar); // ✅ apply formula
+      } else if (e.key === "Escape") {
+        const id = selectedRef.current ?? "A1";
+        setFormulaBar(cells[id]?.raw ?? "");
+        setEditing(null);
+      }
+    }}
+    onBlur={() => {
+      if (editing && selectedRef.current) commitEdit(selectedRef.current, formulaBar);
+    }}
+    aria-label="Formula input"
+  />
+
+  {/* ✅ Apply Formula button */}
+  <button
+    type="button"
+    title="Apply Formula"
+    className="formula-action toolbar-btn toolbar-btn--success toolbar-btn--small"
+    onClick={() => {
+      if (selectedRef.current) {
+        commitEdit(selectedRef.current, formulaBar);
+      }
+    }}
+  >
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M20 6L9 17l-5-5"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  </button>
+</div>
+
+
+
 
     {/* Group: Date / DateTime (separate buttons) */}
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -2144,7 +2364,6 @@ color: pal.text,
     </div>
   </div>
 )}
-
 
       </div>
     </div>
