@@ -9,8 +9,9 @@ import {
   signOut,
   RecaptchaVerifier,
   linkWithPhoneNumber,
-  ConfirmationResult,
 } from "firebase/auth";
+import type { ConfirmationResult } from "firebase/auth";
+
 import logoLight from "../assets/logo_light.png";
 import logoDark from "../assets/logo_dark.png";
 
@@ -156,9 +157,10 @@ async function handleVerifyEmailOtp(e?: React.FormEvent) {
     const res = await verifyEmailOtpOnServer(email, otp);
     if (!res.ok) throw new Error(res.error || "OTP invalid");
     // OTP valid — now create Firebase account
-    const cred = await createUserWithEmailAndPassword(auth, email, password);
-    // set displayName
-    await firebaseUpdateProfile(cred.user, { displayName: name });
+const cred = await createUserWithEmailAndPassword(auth, email, password);
+// set displayName
+await updateProfile(cred.user, { displayName: name });
+
     // success — call onAuth
     onAuth({ name, email, password });
   } catch (err: any) {
