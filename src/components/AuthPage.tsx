@@ -84,15 +84,34 @@ export default function AuthPage({ theme = "light", onAuth, savedUser }: AuthPag
   }, []);
 
   // ensure a single RecaptchaVerifier instance (invisible)
-  function ensureRecaptcha() {
-    if (typeof window === "undefined") return null;
-    // reuse existing instance if present on window
+  // replace your existing ensureRecaptcha() with this
+function ensureRecaptcha() {
+  if (typeof window === "undefined") return null;
+
+  // reuse existing instance if present on window
+  // @ts-ignore
+  if ((window as any).__firebaseRecaptchaVerifier) {
     // @ts-ignore
-    if ((window as any).__firebaseRecaptchaVerifier) {
-      // @ts-ignore
-      recaptchaRef.current = (window as any).__firebaseRecaptchaVerifier;
-      return recaptchaRef.current;
-    }
+    recaptchaRef.current = (window as any).__firebaseRecaptchaVerifier;
+    return recaptchaRef.current;
+  }
+
+  // create invisible recaptcha — call getAuth() inline to avoid any local name-shadowing
+  // cast to any to avoid TypeScript mismatches between firebase versions
+  const verifier = new RecaptchaVerifier(
+    recaptchaContainerId,
+    { size: "invisible" },
+    getAuth() as unknown as any
+  );
+
+  // render returns a promise but we don't strictly need to await it here
+  verifier.render().catch(() => {});
+  recaptchaRef.current = verifier;
+  // cache on window so multiple mounts reuse the same verifier
+  // @ts-ignore
+  (window as any).__firebaseRecaptchaVerifier = verifier;
+  return verifier;
+}
 
     // IMPORTANT: cast `auth` to any to avoid TS version/type overload mismatches.
     // At runtime this still passes the actual Auth object.
