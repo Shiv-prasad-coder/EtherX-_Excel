@@ -31,7 +31,7 @@ type Step = "login" | "signup" | "verifyPhone" | "verifyEmail";
 export default function AuthPage({ theme = "light", onAuth, savedUser }: AuthPageProps) {
   const isDark = theme === "dark";
 
-  // get firebase auth instance once per component
+  // firebase auth instance
   const auth = getAuth();
 
   const C = useMemo(
@@ -54,68 +54,54 @@ export default function AuthPage({ theme = "light", onAuth, savedUser }: AuthPag
   const [name, setName] = useState(savedUser?.name || "");
   const [email, setEmail] = useState(savedUser?.email || "");
   const [password, setPassword] = useState(savedUser?.password || "");
-  const [phone, setPhone] = useState(""); // E.164 recommended: +911234567890
+  const [phone, setPhone] = useState(""); // optional phone field
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
   const [confirmation, setConfirmation] = useState<ConfirmationResult | null>(null);
 
-  // touch confirmation to avoid unused-state warnings
+  // Keep a useEffect that references confirmation so TS won't flag it as unused
   useEffect(() => {
     if (confirmation) {
-      // noop debug
+      // no-op debug
       // eslint-disable-next-line no-console
-      console.debug("confirmation exists");
+      console.debug("confirmation set");
     }
   }, [confirmation]);
 
-  // recaptcha container ref
+  // recaptcha container ref & id
   const recaptchaContainerId = "recaptcha-container";
   const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
 
   useEffect(() => {
+    // cleanup RecaptchaVerifier on unmount if available
     return () => {
       try {
-        // best-effort cleanup
         // @ts-ignore
         recaptchaRef.current?.clear?.();
         recaptchaRef.current = null;
-      } catch {
-        // ignore
-      }
+      } catch {}
     };
   }, []);
 
   // ensure a single RecaptchaVerifier instance (invisible)
-  // replace your entire ensureRecaptcha() with this:
-function ensureRecaptcha() {
-  if (typeof window === "undefined") return null;
-
-  // reuse existing instance if present on window
-  // @ts-ignore
-  if ((window as any).__firebaseRecaptchaVerifier) {
+  function ensureRecaptcha() {
+    if (typeof window === "undefined") return null;
+    // reuse existing instance if present on window
     // @ts-ignore
-    recaptchaRef.current = (window as any).__firebaseRecaptchaVerifier;
-    return recaptchaRef.current;
-  }
+    if ((window as any).__firebaseRecaptchaVerifier) {
+      // @ts-ignore
+      recaptchaRef.current = (window as any).__firebaseRecaptchaVerifier;
+      return recaptchaRef.current;
+    }
 
-  // NOTE: cast `auth` to `any` to satisfy TypeScript overloads/types across firebase versions.
-  // At runtime this is still the real Auth object from getAuth().
-  const verifier = new RecaptchaVerifier(
-    recaptchaContainerId,
-    { size: "invisible" },
-    auth as unknown as any
-  );
+    // IMPORTANT: cast `auth` to any to avoid TS version/type overload mismatches.
+    // At runtime this still passes the actual Auth object.
+    const verifier = new RecaptchaVerifier(
+      recaptchaContainerId,
+      { size: "invisible" },
+      auth as unknown as any
+    );
 
-  // render() returns a promise; ignore for now
-  verifier.render().catch(() => {});
-  recaptchaRef.current = verifier;
-  // @ts-ignore
-  (window as any).__firebaseRecaptchaVerifier = verifier;
-  return verifier;
-}
-
-    // IMPORTANT: pass the `auth` object (not a string)
-    const verifier = new RecaptchaVerifier(recaptchaContainerId, { size: "invisible" }, auth);
     verifier.render().catch(() => {});
     recaptchaRef.current = verifier;
     // @ts-ignore
@@ -124,7 +110,7 @@ function ensureRecaptcha() {
   }
 
   // -------------------------
-  // Helper: server-side email OTP endpoints (your existing API)
+  // Server email OTP endpoint helpers (your API)
   async function sendEmailOtpToServer(email: string) {
     const r = await fetch("/api/send-email-otp", {
       method: "POST",
@@ -143,18 +129,16 @@ function ensureRecaptcha() {
     return r.json();
   }
 
-  // Signup: send OTP (do NOT create Firebase account yet)
+  // Signup: send OTP to email (do NOT create Firebase account yet)
   async function handleSignupSendOtp(e?: React.FormEvent) {
     if (e) e.preventDefault();
     if (!name.trim() || !email || !password) return alert("Please fill name, email and password");
     if (loading) return;
-    // ensure recaptcha is initialized (no-op on SSR)
-    ensureRecaptcha();
+    ensureRecaptcha(); // optional/no-op on SSR
     setLoading(true);
     try {
       const res = await sendEmailOtpToServer(email);
       if (!res.ok) throw new Error(res.error || "Failed to send OTP");
-      // show OTP input
       setStep("verifyEmail");
       alert("OTP sent to your email. Enter code to finish sign up.");
     } catch (err: any) {
@@ -165,21 +149,18 @@ function ensureRecaptcha() {
     }
   }
 
-  // Verify: call server verify and then create Firebase account
+  // Verify OTP on server then create Firebase account
   async function handleVerifyEmailOtp(e?: React.FormEvent) {
     if (e) e.preventDefault();
-    if (!/^\d{6}$/.test(otp)) return alert("Enter 6-digit OTP");
+    if (!/^\d{6}$/.test(otp)) return alert("Enter a 6-digit OTP");
     if (loading) return;
     setLoading(true);
     try {
       const res = await verifyEmailOtpOnServer(email, otp);
       if (!res.ok) throw new Error(res.error || "OTP invalid");
-      // OTP valid — now create Firebase account
+      // create Firebase account
       const cred = await createUserWithEmailAndPassword(auth, email, password);
-      // set displayName
       await updateProfile(cred.user, { displayName: name });
-
-      // success — call onAuth
       onAuth({ name, email, password });
     } catch (err: any) {
       console.error("verifyEmailOtp error:", err);
@@ -189,19 +170,18 @@ function ensureRecaptcha() {
     }
   }
 
-  // --- Wrapper handlers (used in JSX forms) ---
+  // wrapper handlers used by forms
   async function handleSignupSubmit(e?: React.FormEvent) {
     return handleSignupSendOtp(e);
   }
-
   async function handleConfirmOtp(e?: React.FormEvent) {
     return handleVerifyEmailOtp(e);
   }
-
   async function handleResendOtp() {
     return handleSignupSendOtp();
   }
 
+  // Login
   async function handleLogin(e?: React.FormEvent) {
     if (e) e.preventDefault();
     if (!email || !password) return alert("Please enter email and password");
@@ -218,6 +198,7 @@ function ensureRecaptcha() {
     }
   }
 
+  // Forgot password
   async function handleForgotPassword() {
     if (!email) return alert("Enter your email to reset password");
     setLoading(true);
@@ -232,7 +213,7 @@ function ensureRecaptcha() {
     }
   }
 
-  // Styles (kept small, inline for drop-in)
+  // Styles (inline for drop-in)
   const inputStyle: React.CSSProperties = {
     width: "100%",
     padding: "12px 14px",
@@ -268,7 +249,7 @@ function ensureRecaptcha() {
     cursor: "pointer",
   };
 
-  // UI: unified card
+  // UI
   return (
     <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", color: C.text, padding: 16 }}>
       <div style={{ width: "100%", maxWidth: 980, display: "flex", gap: 20, padding: 20 }}>
@@ -285,7 +266,7 @@ function ensureRecaptcha() {
               <input placeholder="Full name" value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} />
               <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
               <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} style={inputStyle} />
-              <input placeholder="Phone (E.164) e.g. +911234567890" value={phone} onChange={(e) => setPhone(e.target.value)} style={inputStyle} />
+              <input placeholder="Phone (optional) e.g. +911234567890" value={phone} onChange={(e) => setPhone(e.target.value)} style={inputStyle} />
               <button type="submit" style={mainButtonStyle} disabled={loading}>{loading ? "Creating..." : "Create account & Send OTP"}</button>
               <button type="button" onClick={() => setStep("login")} style={{ background: "transparent", border: "none", color: "#60a5fa", cursor: "pointer" }} disabled={loading}>Back to login</button>
             </form>
@@ -299,6 +280,17 @@ function ensureRecaptcha() {
               <button type="submit" style={mainButtonStyle} disabled={loading}>{loading ? "Verifying..." : "Verify & Finish"}</button>
               <button type="button" onClick={handleResendOtp} style={secondaryButtonStyle} disabled={loading}>Resend OTP</button>
               <button type="button" onClick={async () => { if (loading) return; await signOut(auth); setStep("signup"); setConfirmation(null); }} style={{ background: "transparent", border: "none", color: "#60a5fa", cursor: "pointer" }}>Cancel & Edit</button>
+            </form>
+          )}
+
+          {/* VERIFY EMAIL (OTP) - same modal used when step === "verifyEmail" */}
+          {step === "verifyEmail" && (
+            <form onSubmit={handleConfirmOtp} style={{ display: "grid", gap: 12 }}>
+              <div style={{ fontSize: 13, color: C.sub }}>We sent an OTP to <strong>{email}</strong>. Enter it below.</div>
+              <input placeholder="6-digit OTP" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))} inputMode="numeric" style={inputStyle} />
+              <button type="submit" style={mainButtonStyle} disabled={loading}>{loading ? "Verifying..." : "Verify & Finish"}</button>
+              <button type="button" onClick={handleResendOtp} style={secondaryButtonStyle} disabled={loading}>Resend OTP</button>
+              <button type="button" onClick={() => setStep("signup")} style={{ background: "transparent", border: "none", color: "#60a5fa", cursor: "pointer" }}>Cancel & Edit</button>
             </form>
           )}
 
@@ -321,7 +313,7 @@ function ensureRecaptcha() {
 
         {/* Right info column */}
         <div style={{ width: 320, background: C.card, padding: 16, borderRadius: 8, border: `1px solid ${C.border}` }}>
-          <h4 style={{ marginTop: 0, color: C.text }}>Why verify phone?</h4>
+          <h4 style={{ marginTop: 0, color: C.text }}>Why verify?</h4>
           <ul style={{ color: C.sub }}>
             <li>Prevent bot & spam accounts.</li>
             <li>Recover access if password lost.</li>
