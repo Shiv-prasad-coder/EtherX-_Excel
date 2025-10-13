@@ -91,11 +91,16 @@ export default function AuthPage({ theme, onAuth }: AuthPageProps) {
 });
 
       await emailjs.send(
-        import.meta.env.VITE_EMAILJS_SERVICE_ID,
-        import.meta.env.VITE_EMAILJS_TEMPLATE_ID,
-        { user_name: name, otp: generated, to_email: email },
-        import.meta.env.VITE_EMAILJS_PUBLIC_KEY
-      );
+  import.meta.env.VITE_EMAILJS_SERVICE_ID,
+  import.meta.env.VITE_EMAILJS_TEMPLATE_ID,
+  {
+    to_name: name,
+    to_email: email,
+    otp_code: generated,  // ✅ match the template variable
+  },
+  import.meta.env.VITE_EMAILJS_PUBLIC_KEY
+);
+
       alert("OTP sent to your email!");
       setStep("verify");
     } catch (err) {
