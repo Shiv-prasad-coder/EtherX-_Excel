@@ -1,4 +1,7 @@
 // src/components/AuthPage.tsx
+// src/components/AuthPage.tsx
+import React, { useMemo, useState, useRef, useEffect } from "react";
+
 import {
   getAuth,
   signInWithEmailAndPassword,
@@ -8,8 +11,6 @@ import {
   signOut,
   RecaptchaVerifier,
 } from "firebase/auth";
-import type { ConfirmationResult } from "firebase/auth";
-
 import type { ConfirmationResult } from "firebase/auth";
 
 import logoLight from "../assets/logo_light.png";
@@ -221,6 +222,48 @@ await updateProfile(cred.user, { displayName: name });
     border: `1px solid ${C.border}`,
     cursor: "pointer",
   };
+// --- Wrapper handlers (used in JSX forms) ---
+async function handleSignupSubmit(e?: React.FormEvent) {
+  return handleSignupSendOtp(e);
+}
+
+async function handleConfirmOtp(e?: React.FormEvent) {
+  return handleVerifyEmailOtp(e);
+}
+
+async function handleResendOtp() {
+  return handleSignupSendOtp();
+}
+
+async function handleLogin(e?: React.FormEvent) {
+  if (e) e.preventDefault();
+  if (!email || !password) return alert("Please enter email and password");
+  setLoading(true);
+  try {
+    const cred = await signInWithEmailAndPassword(auth, email, password);
+    const nameFromAuth = cred.user.displayName ?? email.split("@")[0];
+    onAuth({ name: nameFromAuth, email, password });
+  } catch (err: any) {
+    console.error("login error", err);
+    alert(err?.message ?? "Sign in failed");
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function handleForgotPassword() {
+  if (!email) return alert("Enter your email to reset password");
+  setLoading(true);
+  try {
+    await sendPasswordResetEmail(auth, email);
+    alert("Password reset email sent.");
+  } catch (err: any) {
+    console.error("forgot password error", err);
+    alert(err?.message ?? "Failed to send reset email");
+  } finally {
+    setLoading(false);
+  }
+}
 
   // UI: unified card
   return (
