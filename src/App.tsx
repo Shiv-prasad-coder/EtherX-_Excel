@@ -328,18 +328,11 @@ export default function App() {
   if (!user)
     return (
       <Fade show={!showSplash}>
-        <AuthPage
-          theme={theme}
-          onAuth={handleAuthed}
-          savedUser={(() => {
-            try {
-              const raw = localStorage.getItem(USER_KEY);
-              return raw ? (JSON.parse(raw) as User) : null;
-            } catch {
-              return null;
-            }
-          })()}
-        />
+       <AuthPage
+  theme={theme}
+  onAuth={handleAuthed}
+/>
+
       </Fade>
     );
 
