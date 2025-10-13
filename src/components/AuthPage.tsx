@@ -59,12 +59,12 @@ export default function AuthPage({ theme = "light", onAuth, savedUser }: AuthPag
   const [loading, setLoading] = useState(false);
   const [confirmation, setConfirmation] = useState<ConfirmationResult | null>(null);
 
-  // reference confirmation in effect so TS doesn't complain about unused state
+  // touch confirmation to avoid unused-state warnings
   useEffect(() => {
     if (confirmation) {
-      // harmless debug — no change in logic
+      // noop debug
       // eslint-disable-next-line no-console
-      console.debug("phone confirmation present");
+      console.debug("confirmation exists");
     }
   }, [confirmation]);
 
@@ -73,47 +73,31 @@ export default function AuthPage({ theme = "light", onAuth, savedUser }: AuthPag
   const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
 
   useEffect(() => {
-    // cleanup when component unmounts
     return () => {
       try {
+        // best-effort cleanup
         // @ts-ignore
-        if (recaptchaRef.current) {
-          // best-effort cleanup if available
-          // @ts-ignore
-          recaptchaRef.current.clear?.();
-          recaptchaRef.current = null;
-        }
-      } catch (e) {
+        recaptchaRef.current?.clear?.();
+        recaptchaRef.current = null;
+      } catch {
         // ignore
       }
     };
   }, []);
 
   // ensure a single RecaptchaVerifier instance (invisible)
-function ensureRecaptcha() {
-  if (typeof window === "undefined") return null;
-  // reuse existing instance if present
-  // @ts-ignore
-  if ((window as any).__firebaseRecaptchaVerifier) {
+  function ensureRecaptcha() {
+    if (typeof window === "undefined") return null;
+    // reuse existing instance if present on window
     // @ts-ignore
-    recaptchaRef.current = (window as any).__firebaseRecaptchaVerifier;
-    return recaptchaRef.current;
-  }
+    if ((window as any).__firebaseRecaptchaVerifier) {
+      // @ts-ignore
+      recaptchaRef.current = (window as any).__firebaseRecaptchaVerifier;
+      return recaptchaRef.current;
+    }
 
-  // create invisible recaptcha using the actual Auth instance
-  const verifier = new RecaptchaVerifier(recaptchaContainerId, { size: "invisible" }, auth);
-
-  // render() returns a promise; we can ignore result safely
-  verifier.render().catch(() => {});
-  recaptchaRef.current = verifier;
-  // @ts-ignore
-  (window as any).__firebaseRecaptchaVerifier = verifier;
-  return verifier;
-}
-
-
+    // IMPORTANT: pass the `auth` object (not a string)
     const verifier = new RecaptchaVerifier(recaptchaContainerId, { size: "invisible" }, auth);
-    // we can ignore render() result safely
     verifier.render().catch(() => {});
     recaptchaRef.current = verifier;
     // @ts-ignore
