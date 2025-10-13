@@ -1,6 +1,8 @@
 // src/components/AuthPage.tsx
 // src/components/AuthPage.tsx
 import React, { useMemo, useState, useRef, useEffect } from "react";
+import { getAuth, RecaptchaVerifier, /* ... */ } from "firebase/auth";
+const auth = getAuth();
 
 import {
   getAuth,
@@ -91,21 +93,39 @@ export default function AuthPage({ theme = "light", onAuth, savedUser }: AuthPag
     };
   }, []);
 
-  function ensureRecaptcha() {
-    if (typeof window === "undefined") return null;
-    // cache on window to avoid re-rendering multiple instances
+function ensureRecaptcha() {
+  if (typeof window === "undefined") return null;
+  // reuse existing instance if present
+  // @ts-ignore
+  if ((window as any).__firebaseRecaptchaVerifier) {
     // @ts-ignore
-    if ((window as any).__firebaseRecaptchaVerifier) {
-      // @ts-ignore
-      recaptchaRef.current = (window as any).__firebaseRecaptchaVerifier;
-      return recaptchaRef.current;
-    }
+    recaptchaRef.current = (window as any).__firebaseRecaptchaVerifier;
+    return recaptchaRef.current;
+  }
+
+  // create invisible recaptcha using the actual Auth instance
+  const verifier = new RecaptchaVerifier(
+    recaptchaContainerId,
+    { size: "invisible" },
+    auth // <- important: pass Auth object, not a string
+  );
+
+  // render() returns a promise; we can ignore result safely
+  verifier.render().catch(() => {});
+  recaptchaRef.current = verifier;
+  // @ts-ignore
+  (window as any).__firebaseRecaptchaVerifier = verifier;
+  return verifier;
+}
+
     // create invisible recaptcha
-    const verifier = new RecaptchaVerifier(
-      recaptchaContainerId,
-      { size: "invisible" },
-      auth
-    );
+// ensure you have `const auth = getAuth();` earlier in the file
+const verifier = new RecaptchaVerifier(
+  recaptchaContainerId,
+  { size: "invisible" },
+  auth    // <- correct: pass the Auth instance
+);
+
     // render returns a promise but we don't strictly need to await render here
     verifier.render().catch(() => {});
     recaptchaRef.current = verifier;
