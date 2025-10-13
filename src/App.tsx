@@ -56,18 +56,53 @@ function ensureWorkbookFor(user: { email?: string; name?: string } | null) {
   const key = workbookKeyFor(user);
   try {
     const raw = localStorage.getItem(key);
+    console.debug("[ensureWorkbookFor] load key:", key, "len:", raw ? raw.length : 0);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed as SheetMeta[];
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Ensure every entry has a storageKey using this user's suffix (fix older entries)
+        const suf = userSuffix(user);
+        const fixed = parsed.map((m: SheetMeta) => {
+          // expected storageKey format: excel-clone:sheet:<suf>:<id>
+          const expected = `excel-clone:sheet:${suf}:${m.id}`;
+          if (!m.storageKey || !m.storageKey.includes(`:sheet:${suf}:`)) {
+            // if original data exists under old key, copy it to new key
+            try {
+              const oldPayload = localStorage.getItem(m.storageKey || "");
+              if (oldPayload) {
+                localStorage.setItem(expected, oldPayload);
+              } else {
+                // if nothing under old key, create a blank payload to avoid load errors
+                localStorage.setItem(expected, JSON.stringify({ cells: {} }));
+              }
+            } catch (e) {
+              // fallback: create empty payload
+              localStorage.setItem(expected, JSON.stringify({ cells: {} }));
+            }
+            return { ...m, storageKey: expected };
+          }
+          return m;
+        });
+        // persist fixed meta (so we don't keep migrating again)
+        localStorage.setItem(key, JSON.stringify(fixed));
+        return fixed as SheetMeta[];
+      }
     }
-  } catch {}
-  // create default
+  } catch (e) {
+    console.warn("[ensureWorkbookFor] parse error", e);
+  }
+  // create default workbook for this user
   const suf = userSuffix(user);
   const def = [makeNewMeta("Sheet1", 200, 50, suf)];
   localStorage.setItem(key, JSON.stringify(def));
-  localStorage.setItem(def[0].storageKey, JSON.stringify({ cells: {} }));
+  // seed cells (if not existing) under the namespaced storageKey
+  try {
+    const payloadKey = def[0].storageKey;
+    if (!localStorage.getItem(payloadKey)) localStorage.setItem(payloadKey, JSON.stringify({ cells: {} }));
+  } catch (e) {}
   return def;
 }
+
 
 export default function App() {
   // Inside App() add:
@@ -165,14 +200,50 @@ const [user, setUser] = useState<User | null>(null);
 
   const activeSheet = sheets[activeIndex];
 useEffect(() => {
-  // when user changes, load their workbook (or guest)
+  // ensure workbook/meta exist (and normalize storageKey values)
   const meta = ensureWorkbookFor(user);
   setSheets(meta);
   setActiveIndex(0);
-  // also update USER_KEY if you still store logged in user locally
+
+  // if we want to migrate guest data into a newly-signed-in user:
+  try {
+    const userKey = workbookKeyFor(user);
+    const guestKey = workbookKeyFor(null);
+    // if user has no workbook entries but guest does, copy guest -> user (one-time)
+    const userBlob = localStorage.getItem(userKey);
+    const guestBlob = localStorage.getItem(guestKey);
+    if ((!userBlob || userBlob === "[]") && guestBlob) {
+      try {
+        const parsed = JSON.parse(guestBlob);
+        if (Array.isArray(parsed) && parsed.length > 0 && user) {
+          const suf = userSuffix(user);
+          const migrated = parsed.map((m: SheetMeta) => {
+            const newKey = `excel-clone:sheet:${suf}:${m.id}`;
+            // copy cells payload if exists under old key
+            const oldPayload = localStorage.getItem(m.storageKey);
+            if (oldPayload && !localStorage.getItem(newKey)) {
+              localStorage.setItem(newKey, oldPayload);
+            } else if (!localStorage.getItem(newKey)) {
+              localStorage.setItem(newKey, JSON.stringify({ cells: {} }));
+            }
+            return { ...m, storageKey: newKey };
+          });
+          localStorage.setItem(userKey, JSON.stringify(migrated));
+          setSheets(migrated);
+          console.info("[migration] guest workbook copied to user:", userKey);
+        }
+      } catch (err) {
+        console.warn("[migration] failed to migrate guest workbook", err);
+      }
+    }
+  } catch (e) {
+    /* ignore */
+  }
+
   if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
   else localStorage.removeItem(USER_KEY);
 }, [user]);
+
 
   // Sheet actions
  const addSheet = () => {
