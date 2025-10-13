@@ -1,9 +1,5 @@
 // src/components/AuthPage.tsx
-// src/components/AuthPage.tsx
 import React, { useMemo, useState, useRef, useEffect } from "react";
-import { getAuth, RecaptchaVerifier, /* ... */ } from "firebase/auth";
-
-
 import {
   getAuth,
   signInWithEmailAndPassword,
@@ -17,7 +13,7 @@ import type { ConfirmationResult } from "firebase/auth";
 
 import logoLight from "../assets/logo_light.png";
 import logoDark from "../assets/logo_dark.png";
-const auth = getAuth();
+
 export type AppUser = {
   name: string;
   email: string;
@@ -32,9 +28,10 @@ interface AuthPageProps {
 
 type Step = "login" | "signup" | "verifyPhone" | "verifyEmail";
 
-
 export default function AuthPage({ theme = "light", onAuth, savedUser }: AuthPageProps) {
   const isDark = theme === "dark";
+
+  // get firebase auth instance once per component
   const auth = getAuth();
 
   const C = useMemo(
@@ -61,15 +58,15 @@ export default function AuthPage({ theme = "light", onAuth, savedUser }: AuthPag
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
   const [confirmation, setConfirmation] = useState<ConfirmationResult | null>(null);
-  useEffect(() => {
-  // touch the confirmation variable so TypeScript doesn't complain about 'never read'
-  if (confirmation) {
-    // harmless debug — only used to keep TS quiet
-    // eslint-disable-next-line no-console
-    console.debug("phone confirmation present");
-  }
-}, [confirmation]);
 
+  // reference confirmation in effect so TS doesn't complain about unused state
+  useEffect(() => {
+    if (confirmation) {
+      // harmless debug — no change in logic
+      // eslint-disable-next-line no-console
+      console.debug("phone confirmation present");
+    }
+  }, [confirmation]);
 
   // recaptcha container ref
   const recaptchaContainerId = "recaptcha-container";
@@ -81,8 +78,7 @@ export default function AuthPage({ theme = "light", onAuth, savedUser }: AuthPag
       try {
         // @ts-ignore
         if (recaptchaRef.current) {
-          // RecaptchaVerifier doesn't have .clear() in type defs, but it does have clear in some builds.
-          // Best-effort cleanup:
+          // best-effort cleanup if available
           // @ts-ignore
           recaptchaRef.current.clear?.();
           recaptchaRef.current = null;
@@ -93,40 +89,19 @@ export default function AuthPage({ theme = "light", onAuth, savedUser }: AuthPag
     };
   }, []);
 
-function ensureRecaptcha() {
-  if (typeof window === "undefined") return null;
-  // reuse existing instance if present
-  // @ts-ignore
-  if ((window as any).__firebaseRecaptchaVerifier) {
+  // ensure a single RecaptchaVerifier instance (invisible)
+  function ensureRecaptcha() {
+    if (typeof window === "undefined") return null;
+    // reuse existing instance if present on window
     // @ts-ignore
-    recaptchaRef.current = (window as any).__firebaseRecaptchaVerifier;
-    return recaptchaRef.current;
-  }
+    if ((window as any).__firebaseRecaptchaVerifier) {
+      // @ts-ignore
+      recaptchaRef.current = (window as any).__firebaseRecaptchaVerifier;
+      return recaptchaRef.current;
+    }
 
-  // create invisible recaptcha using the actual Auth instance
-  const verifier = new RecaptchaVerifier(
-    recaptchaContainerId,
-    { size: "invisible" },
-    auth // <- important: pass Auth object, not a string
-  );
-
-  // render() returns a promise; we can ignore result safely
-  verifier.render().catch(() => {});
-  recaptchaRef.current = verifier;
-  // @ts-ignore
-  (window as any).__firebaseRecaptchaVerifier = verifier;
-  return verifier;
-}
-
-    // create invisible recaptcha
-// ensure you have `const auth = getAuth();` earlier in the file
-const verifier = new RecaptchaVerifier(
-  recaptchaContainerId,
-  { size: "invisible" },
-  auth    // <- correct: pass the Auth instance
-);
-
-    // render returns a promise but we don't strictly need to await render here
+    const verifier = new RecaptchaVerifier(recaptchaContainerId, { size: "invisible" }, auth);
+    // we can ignore render() result safely
     verifier.render().catch(() => {});
     recaptchaRef.current = verifier;
     // @ts-ignore
@@ -135,77 +110,113 @@ const verifier = new RecaptchaVerifier(
   }
 
   // -------------------------
-  // SIGNUP flow (email+password -> link phone -> complete)
-// inside your AuthPage component (replace the previous signup handlers)
-
-async function sendEmailOtpToServer(email: string) {
-  const r = await fetch("/api/send-email-otp", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
-  });
-  return r.json();
-}
-
-async function verifyEmailOtpOnServer(email: string, code: string) {
-  const r = await fetch("/api/verify-email-otp", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, code }),
-  });
-  return r.json();
-}
-
-// Signup: send OTP (do NOT create Firebase account yet)
-async function handleSignupSendOtp(e?: React.FormEvent) {
-  if (e) e.preventDefault();
-  if (!name.trim() || !email || !password) return alert("Please fill name, email and password");
-  if (loading) return;
-  // make sure recaptcha helper is initialized (no-op on SSR)
-  ensureRecaptcha();
-  setLoading(true)
-  try {
-    const res = await sendEmailOtpToServer(email);
-    if (!res.ok) throw new Error(res.error || "Failed to send OTP");
-    // show OTP input
-    setStep("verifyEmail");
-    alert("OTP sent to your email. Enter code to finish sign up.");
-  } catch (err: any) {
-    console.error("sendEmailOtp error:", err);
-    alert(err?.message ?? err?.error ?? "Failed to send OTP");
-  } finally {
-    setLoading(false);
+  // Helper: server-side email OTP endpoints (your existing API)
+  async function sendEmailOtpToServer(email: string) {
+    const r = await fetch("/api/send-email-otp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    return r.json();
   }
-}
 
-// Verify: call server verify and then create Firebase account
-
-
-async function handleVerifyEmailOtp(e?: React.FormEvent) {
-  if (e) e.preventDefault();
-  if (!/^\d{6}$/.test(otp)) return alert("Enter 6-digit OTP");
-  if (loading) return;
-  setLoading(true);
-  try {
-    const res = await verifyEmailOtpOnServer(email, otp);
-    if (!res.ok) throw new Error(res.error || "OTP invalid");
-    // OTP valid — now create Firebase account
-const cred = await createUserWithEmailAndPassword(auth, email, password);
-// set displayName
-await updateProfile(cred.user, { displayName: name });
-
-    // success — call onAuth
-    onAuth({ name, email, password });
-  } catch (err: any) {
-    console.error("verifyEmailOtp error:", err);
-    alert(err?.message ?? err?.error ?? "Failed to verify OTP");
-  } finally {
-    setLoading(false);
+  async function verifyEmailOtpOnServer(email: string, code: string) {
+    const r = await fetch("/api/verify-email-otp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, code }),
+    });
+    return r.json();
   }
-}
 
+  // Signup: send OTP (do NOT create Firebase account yet)
+  async function handleSignupSendOtp(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    if (!name.trim() || !email || !password) return alert("Please fill name, email and password");
+    if (loading) return;
+    // ensure recaptcha is initialized (no-op on SSR)
+    ensureRecaptcha();
+    setLoading(true);
+    try {
+      const res = await sendEmailOtpToServer(email);
+      if (!res.ok) throw new Error(res.error || "Failed to send OTP");
+      // show OTP input
+      setStep("verifyEmail");
+      alert("OTP sent to your email. Enter code to finish sign up.");
+    } catch (err: any) {
+      console.error("sendEmailOtp error:", err);
+      alert(err?.message ?? err?.error ?? "Failed to send OTP");
+    } finally {
+      setLoading(false);
+    }
+  }
 
- 
+  // Verify: call server verify and then create Firebase account
+  async function handleVerifyEmailOtp(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    if (!/^\d{6}$/.test(otp)) return alert("Enter 6-digit OTP");
+    if (loading) return;
+    setLoading(true);
+    try {
+      const res = await verifyEmailOtpOnServer(email, otp);
+      if (!res.ok) throw new Error(res.error || "OTP invalid");
+      // OTP valid — now create Firebase account
+      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      // set displayName
+      await updateProfile(cred.user, { displayName: name });
+
+      // success — call onAuth
+      onAuth({ name, email, password });
+    } catch (err: any) {
+      console.error("verifyEmailOtp error:", err);
+      alert(err?.message ?? err?.error ?? "Failed to verify OTP");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // --- Wrapper handlers (used in JSX forms) ---
+  async function handleSignupSubmit(e?: React.FormEvent) {
+    return handleSignupSendOtp(e);
+  }
+
+  async function handleConfirmOtp(e?: React.FormEvent) {
+    return handleVerifyEmailOtp(e);
+  }
+
+  async function handleResendOtp() {
+    return handleSignupSendOtp();
+  }
+
+  async function handleLogin(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    if (!email || !password) return alert("Please enter email and password");
+    setLoading(true);
+    try {
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      const nameFromAuth = cred.user.displayName ?? email.split("@")[0];
+      onAuth({ name: nameFromAuth, email, password });
+    } catch (err: any) {
+      console.error("login error", err);
+      alert(err?.message ?? "Sign in failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleForgotPassword() {
+    if (!email) return alert("Enter your email to reset password");
+    setLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      alert("Password reset email sent.");
+    } catch (err: any) {
+      console.error("forgot password error", err);
+      alert(err?.message ?? "Failed to send reset email");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   // Styles (kept small, inline for drop-in)
   const inputStyle: React.CSSProperties = {
@@ -242,48 +253,6 @@ await updateProfile(cred.user, { displayName: name });
     border: `1px solid ${C.border}`,
     cursor: "pointer",
   };
-// --- Wrapper handlers (used in JSX forms) ---
-async function handleSignupSubmit(e?: React.FormEvent) {
-  return handleSignupSendOtp(e);
-}
-
-async function handleConfirmOtp(e?: React.FormEvent) {
-  return handleVerifyEmailOtp(e);
-}
-
-async function handleResendOtp() {
-  return handleSignupSendOtp();
-}
-
-async function handleLogin(e?: React.FormEvent) {
-  if (e) e.preventDefault();
-  if (!email || !password) return alert("Please enter email and password");
-  setLoading(true);
-  try {
-    const cred = await signInWithEmailAndPassword(auth, email, password);
-    const nameFromAuth = cred.user.displayName ?? email.split("@")[0];
-    onAuth({ name: nameFromAuth, email, password });
-  } catch (err: any) {
-    console.error("login error", err);
-    alert(err?.message ?? "Sign in failed");
-  } finally {
-    setLoading(false);
-  }
-}
-
-async function handleForgotPassword() {
-  if (!email) return alert("Enter your email to reset password");
-  setLoading(true);
-  try {
-    await sendPasswordResetEmail(auth, email);
-    alert("Password reset email sent.");
-  } catch (err: any) {
-    console.error("forgot password error", err);
-    alert(err?.message ?? "Failed to send reset email");
-  } finally {
-    setLoading(false);
-  }
-}
 
   // UI: unified card
   return (
@@ -315,7 +284,7 @@ async function handleForgotPassword() {
               <input placeholder="OTP" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))} inputMode="numeric" style={inputStyle} />
               <button type="submit" style={mainButtonStyle} disabled={loading}>{loading ? "Verifying..." : "Verify & Finish"}</button>
               <button type="button" onClick={handleResendOtp} style={secondaryButtonStyle} disabled={loading}>Resend OTP</button>
-              <button type="button" onClick={async () => { /* cancel signup: sign out & go back */ if (loading) return; await signOut(auth); setStep("signup"); setConfirmation(null); }} style={{ background: "transparent", border: "none", color: "#60a5fa", cursor: "pointer" }}>Cancel & Edit</button>
+              <button type="button" onClick={async () => { if (loading) return; await signOut(auth); setStep("signup"); setConfirmation(null); }} style={{ background: "transparent", border: "none", color: "#60a5fa", cursor: "pointer" }}>Cancel & Edit</button>
             </form>
           )}
 
