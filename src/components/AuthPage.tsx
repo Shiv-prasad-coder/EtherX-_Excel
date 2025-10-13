@@ -5,7 +5,6 @@ import {
   sendSignInLinkToEmail,
   isSignInWithEmailLink,
   signInWithEmailLink,
-  // keep existing auth flows (if using password login later)
   signInWithEmailAndPassword,
 } from "firebase/auth";
 
@@ -26,7 +25,7 @@ export default function AuthPage({ theme, onAuth, savedUser }: AuthPageProps) {
   const C = useMemo(
     () => ({
       bg: isDark ? "#000000" : "#f8fafc",
-      card: isDark ? "#000000" : "#ffffff", // full black in dark mode
+      card: isDark ? "#000000" : "#ffffff",
       text: isDark ? "#eaeaea" : "#0f172a",
       sub: isDark ? "#b4b4b4" : "#64748b",
       border: isDark ? "#1a1a1a" : "#e5e7eb",
@@ -52,7 +51,6 @@ export default function AuthPage({ theme, onAuth, savedUser }: AuthPageProps) {
 
   // Firebase actionCodeSettings for magic link
   const actionCodeSettings = {
-    // will redirect back to same origin and component mount will finish sign-in
     url: `${typeof window !== "undefined" ? window.location.origin : ""}`,
     handleCodeInApp: true,
   };
@@ -66,10 +64,9 @@ export default function AuthPage({ theme, onAuth, savedUser }: AuthPageProps) {
       (async () => {
         setLoading(true);
         try {
-          // Prefer email stored earlier; otherwise prompt user to confirm
+          // stored email (on the device that requested the link)
           let stored = window.localStorage.getItem("emailForSignIn") || "";
           if (!stored) {
-            // don't block — prompt user to input the same email they used earlier
             stored = window.prompt("Please confirm your email to finish sign-in") || "";
           }
           if (!stored) {
@@ -79,10 +76,8 @@ export default function AuthPage({ theme, onAuth, savedUser }: AuthPageProps) {
           }
 
           const result = await signInWithEmailLink(auth, stored, href);
-          // sign-in succeeded: call onAuth with basic info
           const u = result.user;
           const displayName = u.displayName ?? (u.email ? u.email.split("@")[0] : stored.split("@")[0]);
-          // cleanup saved email
           try {
             window.localStorage.removeItem("emailForSignIn");
           } catch {}
@@ -106,12 +101,9 @@ export default function AuthPage({ theme, onAuth, savedUser }: AuthPageProps) {
     try {
       const auth = getAuth();
       await sendSignInLinkToEmail(auth, email, actionCodeSettings);
-      // store email so we can finish sign-in on same device
       try {
         window.localStorage.setItem("emailForSignIn", email);
-      } catch (e) {
-        // ignore storage errors
-      }
+      } catch {}
       alert("Magic sign-in link sent. Check your email (spam folder too).");
     } catch (err: any) {
       console.error("sendSignInLinkToEmail error:", err);
@@ -135,16 +127,11 @@ export default function AuthPage({ theme, onAuth, savedUser }: AuthPageProps) {
     setLoading(true);
     try {
       const auth = getAuth();
-      // Try password sign-in (existing behavior); if you don't use password sign-in, you can instead call sendMagicLink
-      // If you want to rely on magic link only, remove the block below and call sendMagicLink()
       try {
-        // attempt sign in with password if user exists
-        // we import signInWithEmailAndPassword above; if you don't want password auth, remove this
         const cred = await signInWithEmailAndPassword(auth, email, password);
         const nameFromAuth = cred.user.displayName ?? email.split("@")[0];
         onAuth({ name: nameFromAuth, email, password });
       } catch (pwErr) {
-        // fallback: if password login fails, offer to send magic link instead
         console.warn("Password login failed, offering magic link:", pwErr);
         if (confirm("Password login failed. Send a magic sign-in link to your email instead?")) {
           await sendMagicLink();
@@ -161,6 +148,8 @@ export default function AuthPage({ theme, onAuth, savedUser }: AuthPageProps) {
   function verifyAndSignup(e: React.FormEvent) {
     e.preventDefault();
     if (!/^\d{6}$/.test(otp)) return alert("Enter a 6-digit OTP");
+    // NOTE: this OTP flow here is purely UI-level placeholder.
+    // If using Firebase magic links, sendMagicLink() + signInWithEmailLink completes auth.
     onAuth({ name, email, password });
   }
 
@@ -261,22 +250,8 @@ export default function AuthPage({ theme, onAuth, savedUser }: AuthPageProps) {
         {/* LOGIN */}
         {step === "login" && !isSignup && (
           <form onSubmit={doLogin} style={{ marginTop: 18, display: "grid", gap: 14 }}>
-            <input
-              type="email"
-              placeholder="Email address"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
-              style={inputStyle}
-            />
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              style={inputStyle}
-            />
+            <input type="email" placeholder="Email address" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" style={inputStyle} />
+            <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" style={inputStyle} />
             <div style={{ display: "flex", gap: 8 }}>
               <button
                 type="submit"
