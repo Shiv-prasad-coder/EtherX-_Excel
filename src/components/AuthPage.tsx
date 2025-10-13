@@ -1,76 +1,38 @@
 // src/components/AuthPage.tsx
-import React, { useEffect, useMemo, useState } from "react";
-import {
-  getAuth as firebaseGetAuth,
-  sendSignInLinkToEmail,
-  isSignInWithEmailLink,
-  signInWithEmailLink,
-  signInWithEmailAndPassword,
-  type Auth,
-} from "firebase/auth";
-import { initializeApp, type FirebaseApp } from "firebase/app";
+import React, { useMemo, useState } from "react";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+import { initializeApp } from "firebase/app";
+import emailjs from "emailjs-com";
 
 import logoLight from "../assets/logo_light.png";
 import logoDark from "../assets/logo_dark.png";
 
+/* ----------------- Firebase Init ----------------- */
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+
+/* ----------------- Component ----------------- */
 interface AuthPageProps {
   theme: "light" | "dark";
-  onAuth: (user: { name: string; email: string; password?: string }) => void;
-  savedUser?: { name: string; email: string; password?: string } | null;
+  onAuth: (user: { name: string; email: string }) => void;
 }
 
-type Step = "login" | "signup" | "otp";
+type Step = "login" | "signup" | "verify";
 
-/* --------------------------- Firebase Config --------------------------- */
-let _fbApp: FirebaseApp | null = null;
-
-function getFirebaseApp(): FirebaseApp | null {
-  if (typeof window === "undefined") return null; // avoid SSR issues
-  if (_fbApp) return _fbApp;
-
-  const config = {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-    appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  };
-
-  if (!config.apiKey || !config.projectId) {
-    console.warn("⚠️ Firebase config missing — skipping initializeApp()", config);
-    return null;
-  }
-
-  try {
-    _fbApp = initializeApp(config);
-    console.info("✅ Firebase initialized");
-    return _fbApp;
-  } catch (err) {
-    console.error("🔥 Firebase initialization failed:", err);
-    return null;
-  }
-}
-
-function getAuthSafe(): Auth | null {
-  const app = getFirebaseApp();
-  if (!app) return null;
-  try {
-    return firebaseGetAuth(app);
-  } catch (err) {
-    console.error("getAuth failed:", err);
-    return null;
-  }
-}
-
-/* ---------------------------- AuthPage Component ---------------------------- */
-export default function AuthPage({ theme, onAuth, savedUser }: AuthPageProps) {
+export default function AuthPage({ theme, onAuth }: AuthPageProps) {
   const isDark = theme === "dark";
-
   const C = useMemo(
     () => ({
-      bg: isDark ? "#000000" : "#f8fafc",
-      card: isDark ? "#000000" : "#ffffff",
+      bg: isDark ? "#000" : "#f8fafc",
+      card: isDark ? "#000" : "#fff",
       text: isDark ? "#eaeaea" : "#0f172a",
       sub: isDark ? "#b4b4b4" : "#64748b",
       border: isDark ? "#1a1a1a" : "#e5e7eb",
@@ -78,111 +40,20 @@ export default function AuthPage({ theme, onAuth, savedUser }: AuthPageProps) {
       inputBorder: isDark ? "#2a2a2a" : "#d1d5db",
       btn: "#2563eb",
       btnHover: "#1d4ed8",
-      btnMuted: isDark ? "#1a1a1a" : "#f1f5f9",
     }),
     [isDark]
   );
 
+  /* ----------------- State ----------------- */
   const [step, setStep] = useState<Step>("login");
-  const [isSignup, setIsSignup] = useState(false);
-  const [name, setName] = useState(savedUser?.name || "");
-  const [email, setEmail] = useState(savedUser?.email || "");
-  const [password, setPassword] = useState(savedUser?.password || "");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
+  const [sentOtp, setSentOtp] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const actionCodeSettings = {
-    url: window.location.origin,
-    handleCodeInApp: true,
-  };
-
-  /* ------------------------- Handle Magic Link Sign-in ------------------------- */
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const href = window.location.href;
-    const auth = getAuthSafe();
-    if (!auth) return;
-
-    if (isSignInWithEmailLink(auth, href)) {
-      (async () => {
-        setLoading(true);
-        try {
-          let stored = window.localStorage.getItem("emailForSignIn") || "";
-          if (!stored) stored = window.prompt("Confirm your email to finish sign-in") || "";
-          if (!stored) return alert("Email required to finish sign-in.");
-          const result = await signInWithEmailLink(auth, stored, href);
-          const u = result.user;
-          const displayName = u.displayName ?? u.email?.split("@")[0] ?? stored.split("@")[0];
-          window.localStorage.removeItem("emailForSignIn");
-          onAuth({ name: displayName, email: u.email ?? stored });
-        } catch (err: any) {
-          console.error("Error finishing sign-in:", err);
-          alert(err?.message ?? "Failed to finish sign-in");
-        } finally {
-          setLoading(false);
-        }
-      })();
-    }
-  }, []);
-
-  /* ------------------------------- Handlers ------------------------------- */
-  async function sendMagicLink(e?: React.FormEvent) {
-    if (e) e.preventDefault();
-    if (!email) return alert("Enter your email to receive the magic link");
-    setLoading(true);
-    try {
-      const auth = getAuthSafe();
-      if (!auth) throw new Error("Firebase not configured (auth missing).");
-      await sendSignInLinkToEmail(auth, email, actionCodeSettings);
-      localStorage.setItem("emailForSignIn", email);
-      alert("✅ Magic link sent! Check your email (including spam).");
-    } catch (err: any) {
-      console.error("sendSignInLinkToEmail error:", err);
-      alert(err?.message ?? "Failed to send sign-in link.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function doLogin(e: React.FormEvent) {
-    e.preventDefault();
-    if (!email || !password) return alert("Enter email and password");
-    setLoading(true);
-    try {
-      const auth = getAuthSafe();
-      if (!auth) {
-        onAuth({ name: name || email.split("@")[0], email, password });
-        return;
-      }
-      try {
-        const cred = await signInWithEmailAndPassword(auth, email, password);
-        const nameFromAuth = cred.user.displayName ?? email.split("@")[0];
-        onAuth({ name: nameFromAuth, email, password });
-      } catch (pwErr) {
-        console.warn("Password login failed:", pwErr);
-        if (confirm("Password login failed. Send magic link instead?")) await sendMagicLink();
-      }
-    } catch (err: any) {
-      alert(err?.message ?? "Login failed");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function startSignup(e?: React.FormEvent) {
-    e?.preventDefault();
-    if (!name.trim()) return alert("Enter your name");
-    if (!email) return alert("Enter your email");
-    setStep("otp");
-  }
-
-  function verifyAndSignup(e: React.FormEvent) {
-    e.preventDefault();
-    if (!/^\d{6}$/.test(otp)) return alert("Enter a 6-digit OTP");
-    onAuth({ name, email, password });
-  }
-
-  /* ------------------------------- UI ------------------------------- */
+  /* ----------------- Helpers ----------------- */
   const inputStyle: React.CSSProperties = {
     width: "100%",
     padding: "12px 14px",
@@ -192,98 +63,94 @@ export default function AuthPage({ theme, onAuth, savedUser }: AuthPageProps) {
     color: C.text,
     fontSize: 15,
   };
-
-  const mainButtonStyle: React.CSSProperties = {
+  const btn: React.CSSProperties = {
     width: "100%",
     padding: "12px",
     borderRadius: 10,
     background: C.btn,
     color: "#fff",
     fontWeight: 600,
-    fontSize: 16,
     border: "none",
     cursor: "pointer",
   };
 
-  const secondaryButtonStyle: React.CSSProperties = {
-    width: "100%",
-    padding: "12px",
-    borderRadius: 10,
-    background: C.btnMuted,
-    color: C.text,
-    fontWeight: 600,
-    fontSize: 15,
-    border: `1px solid ${C.border}`,
-    cursor: "pointer",
-  };
+  /* ----------------- Actions ----------------- */
+  async function handleSendOtp(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name || !email || !password) return alert("Fill all fields");
 
+    const generated = Math.floor(100000 + Math.random() * 900000).toString();
+    setSentOtp(generated);
+    setLoading(true);
+
+    try {
+      await emailjs.send(
+        import.meta.env.VITE_EMAILJS_SERVICE_ID,
+        import.meta.env.VITE_EMAILJS_TEMPLATE_ID,
+        { user_name: name, otp: generated, to_email: email },
+        import.meta.env.VITE_EMAILJS_PUBLIC_KEY
+      );
+      alert("OTP sent to your email!");
+      setStep("verify");
+    } catch (err) {
+      console.error("EmailJS error:", err);
+      alert("Failed to send OTP email");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleVerifyOtp(e: React.FormEvent) {
+    e.preventDefault();
+    if (otp !== sentOtp) return alert("Incorrect OTP");
+    setLoading(true);
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      alert("Account created successfully!");
+      onAuth({ name, email: cred.user.email! });
+    } catch (err: any) {
+      console.error(err);
+      alert(err?.message ?? "Signup failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email || !password) return alert("Enter credentials");
+    setLoading(true);
+    try {
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      onAuth({ name: cred.user.displayName ?? email.split("@")[0], email });
+    } catch (err: any) {
+      console.error(err);
+      alert(err?.message ?? "Login failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /* ----------------- UI ----------------- */
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: C.bg,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: C.text,
-        padding: 16,
-      }}
-    >
-      <div
-        style={{
-          width: 520,
-          background: C.card,
-          borderRadius: 16,
-          border: `1px solid ${C.border}`,
-          padding: 28,
-          boxShadow: isDark
-            ? "0 0 30px rgba(255,255,255,0.02)"
-            : "0 10px 30px rgba(0,0,0,0.08)",
-        }}
-      >
-        <div style={{ textAlign: "center", marginBottom: 20 }}>
-          <img
-            src={isDark ? logoDark : logoLight}
-            alt="Logo"
-            style={{
-              width: 140,
-              height: 140,
-              marginBottom: 10,
-              objectFit: "contain",
-            }}
-          />
-          <h1>{step === "otp" ? "Verify Email" : isSignup ? "Sign Up" : "Sign In"}</h1>
-          <p style={{ color: C.sub, marginTop: -5 }}>
-            {step === "otp" ? "Check your inbox for OTP" : isSignup ? "Create a new account" : "Welcome back"}
-          </p>
+    <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ width: 460, background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, padding: 30 }}>
+        <div style={{ textAlign: "center" }}>
+          <img src={isDark ? logoDark : logoLight} alt="Logo" style={{ width: 120, height: 120 }} />
+          <h1 style={{ color: C.text }}>{step === "verify" ? "Verify OTP" : step === "signup" ? "Create Account" : "Login"}</h1>
         </div>
 
-        {step === "login" && !isSignup && (
-          <form onSubmit={doLogin} style={{ display: "grid", gap: 14 }}>
+        {step === "login" && (
+          <form onSubmit={handleLogin} style={{ display: "grid", gap: 14, marginTop: 20 }}>
             <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
             <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} style={inputStyle} />
-            <div style={{ display: "flex", gap: 10 }}>
-              <button type="submit" style={mainButtonStyle} disabled={loading}>
-                {loading ? "Signing in..." : "Login"}
-              </button>
-              <button type="button" onClick={sendMagicLink} style={secondaryButtonStyle} disabled={!email || loading}>
-                Magic Link
-              </button>
-            </div>
+            <button type="submit" style={btn} disabled={loading}>
+              {loading ? "Logging in..." : "Login"}
+            </button>
             <button
               type="button"
-              onClick={() => {
-                setIsSignup(true);
-                setStep("signup");
-              }}
-              style={{
-                background: "transparent",
-                border: "none",
-                color: "#60a5fa",
-                cursor: "pointer",
-                textDecoration: "underline",
-                fontWeight: 500,
-              }}
+              onClick={() => setStep("signup")}
+              style={{ background: "transparent", border: "none", color: "#60a5fa", cursor: "pointer" }}
             >
               Create a new account
             </button>
@@ -291,37 +158,28 @@ export default function AuthPage({ theme, onAuth, savedUser }: AuthPageProps) {
         )}
 
         {step === "signup" && (
-          <form onSubmit={startSignup} style={{ display: "grid", gap: 14 }}>
-            <input type="text" placeholder="Full name" value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} />
+          <form onSubmit={handleSendOtp} style={{ display: "grid", gap: 14, marginTop: 20 }}>
+            <input type="text" placeholder="Full Name" value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} />
             <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
-            <button type="submit" style={mainButtonStyle}>
-              Continue
+            <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} style={inputStyle} />
+            <button type="submit" style={btn} disabled={loading}>
+              {loading ? "Sending OTP..." : "Send OTP"}
             </button>
             <button
               type="button"
-              onClick={() => {
-                setIsSignup(false);
-                setStep("login");
-              }}
-              style={secondaryButtonStyle}
+              onClick={() => setStep("login")}
+              style={{ background: "transparent", border: "none", color: "#60a5fa", cursor: "pointer" }}
             >
               Back to login
             </button>
           </form>
         )}
 
-        {step === "otp" && (
-          <form onSubmit={verifyAndSignup} style={{ display: "grid", gap: 14 }}>
-            <input
-              inputMode="numeric"
-              maxLength={6}
-              placeholder="Enter OTP"
-              value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-              style={inputStyle}
-            />
-            <button type="submit" style={mainButtonStyle}>
-              Verify & Sign Up
+        {step === "verify" && (
+          <form onSubmit={handleVerifyOtp} style={{ display: "grid", gap: 14, marginTop: 20 }}>
+            <input type="text" placeholder="Enter OTP" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))} style={inputStyle} maxLength={6} />
+            <button type="submit" style={btn} disabled={loading}>
+              {loading ? "Verifying..." : "Verify & Create Account"}
             </button>
           </form>
         )}
