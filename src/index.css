@@ -51,6 +51,102 @@ body.light {
   --handle: #3b82f6;
   --outline: #3b82f6;
 }
+/* ===== Nice button styles for toolbar ===== */
+.toolbar-btn,
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  min-height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--toolbar-bg);
+  color: var(--toolbar-text);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+  box-shadow: 0 6px 18px rgba(2,6,23,0.06);
+  transition: transform .08s ease, box-shadow .12s ease, filter .12s ease, background .12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* lift on hover */
+.toolbar-btn:hover,
+.button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(2,6,23,0.08);
+  filter: brightness(1.02);
+}
+
+/* pressed state */
+.toolbar-btn:active,
+.button:active {
+  transform: translateY(0);
+  box-shadow: 0 6px 14px rgba(2,6,23,0.06);
+}
+
+/* disabled */
+.toolbar-btn[disabled],
+.button[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Primary / accent button (blue) */
+.toolbar-btn--primary,
+.button--primary {
+  background: linear-gradient(180deg, var(--select), #2563eb);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 8px 24px rgba(37,99,235,0.16);
+}
+
+/* Danger button (red) */
+/* Red / danger button visible in both themes */
+.toolbar-btn--danger,
+.button--danger {
+  background: linear-gradient(180deg, #dc2626 0%, #b91c1c 100%);
+  color: #fff;
+  border: none;
+  box-shadow: 0 6px 18px rgba(220, 38, 38, 0.25);
+  transition: background  0.15s ease, box-shadow 0.15s ease;
+}
+
+.toolbar-btn--danger:hover,
+.button--danger:hover {
+  background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
+  box-shadow: 0 10px 24px rgba(220, 38, 38, 0.3);
+}
+
+.toolbar-btn--danger:active,
+.button--danger:active {
+  background: linear-gradient(180deg, #b91c1c 0%, #991b1b 100%);
+  box-shadow: 0 4px 12px rgba(185, 28, 28, 0.4);
+}
+
+
+/* Small icon-only button (compact) */
+.toolbar-btn--small {
+  padding: 6px;
+  min-width: 34px;
+  justify-content: center;
+}
+
+/* Make inputs used in toolbars align nicely */
+.toolbar-input {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--toolbar-bg);
+  color: var(--toolbar-text);
+  height: 34px;
+  font-size: 13px;
+}
+
 
 /* Real dark mode */
 .dark {
@@ -74,3 +170,552 @@ body.light {
 /* Small helpers (you already have toolbar classes) */
 body { background: var(--app-bg); color: var(--text); }
 .toolbar-chip, .toolbar-btn, .toolbar-input { color: var(--toolbar-text); }
+/* Strong override for danger buttons — paste at the very end of your global CSS */
+.toolbar-btn.toolbar-btn--danger,
+.button.toolbar-btn--danger,
+.toolbar-btn--danger.button {
+  background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%) !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 8px 28px rgba(220, 38, 38, 0.22) !important;
+}
+
+/* Hover / active (important to ensure visible feedback) */
+.toolbar-btn.toolbar-btn--danger:hover,
+.button.toolbar-btn--danger:hover {
+  background: linear-gradient(180deg, #fb6b6b 0%, #ef4444 100%) !important;
+  box-shadow: 0 12px 34px rgba(220, 38, 38, 0.28) !important;
+}
+.toolbar-btn.toolbar-btn--danger:active,
+.button.toolbar-btn--danger:active {
+  background: linear-gradient(180deg, #b91c1c 0%, #991b1b 100%) !important;
+  box-shadow: 0 4px 10px rgba(185, 28, 28, 0.4) !important;
+}
+
+/* Ensure dark-mode variant (if you scope colors under body.dark) */
+body.dark .toolbar-btn.toolbar-btn--danger,
+body.dark .button.toolbar-btn--danger {
+  background: linear-gradient(180deg,#ef4444 0%, #dc2626 100%) !important;
+  color: #fff !important;
+}
+
+/* Formula bar — polished, theme-aware */
+.formula-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 260px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--toolbar-bg);
+  color: var(--toolbar-text);
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 18px rgba(2,6,23,0.04);
+  transition: box-shadow .12s ease, transform .08s ease, border-color .12s ease, background .12s ease;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.formula-bar:focus-within {
+  box-shadow: 0 10px 30px rgba(37,99,235,0.12);
+  border-color: var(--outline);
+  transform: translateY(-1px);
+}
+
+/* input inside formula bar */
+.formula-bar input[type="text"] {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  outline: none;
+  padding: 0;
+  min-width: 0; /* allow shrink */
+}
+
+/* small icon at left */
+.formula-bar .formula-icon {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.9;
+}
+
+/* clear / commit button (right) */
+.formula-bar .formula-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  color: var(--toolbar-text);
+  transition: background .12s ease, border-color .12s ease;
+}
+.formula-bar .formula-action:hover {
+  background: rgba(0,0,0,0.04);
+}
+body.dark .formula-bar .formula-action:hover {
+  background: rgba(255,255,255,0.03);
+}
+
+/* placeholder styling */
+.formula-bar input::placeholder { color: color-mix(in srgb, var(--toolbar-text) 50%, transparent); }
+
+/* compact variant used in insert tab */
+.formula-bar--compact { min-width: 200px; padding: 6px 10px; border-radius: 8px; }
+/* ---------- Thin, animated formula bar (modern + theme aware) ---------- */
+/* Use: <div className="formula-bar formula-bar--thin"> ... </div> */
+
+.formula-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--toolbar-bg) 92%, #ffffff 8%), color-mix(in srgb, var(--toolbar-bg) 86%, #000000 6%));
+  color: var(--toolbar-text);
+  border: 1px solid rgba(0,0,0,0.04);
+  box-shadow: 0 6px 20px rgba(2,6,23,0.04);
+  transition: transform .12s cubic-bezier(.2,.8,.2,1), box-shadow .14s ease, border-color .12s ease, background .12s ease;
+  font-size: 13px;
+  box-sizing: border-box;
+  backdrop-filter: blur(6px) saturate(120%);
+  -webkit-backdrop-filter: blur(6px) saturate(120%);
+  animation: popIn .14s ease;
+}
+
+/* Thinner variant */
+.formula-bar.formula-bar--thin {
+  padding: 6px 10px;
+  border-radius: 8px;
+  min-height: 32px;
+  font-size: 13px;
+}
+
+/* Lift + glow on focus */
+.formula-bar:focus-within {
+  transform: translateY(-4px);
+  box-shadow: 0 18px 40px rgba(37,99,235,0.10);
+  border-color: var(--outline);
+}
+
+/* Input */
+.formula-bar input[type="text"] {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  outline: none;
+  padding: 0;
+  min-width: 0; /* allow shrink */
+  line-height: 1;
+  --placeholder-alpha: 0.45;
+}
+
+/* Left icon */
+.formula-bar .formula-icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.95;
+  transform-origin: center;
+  transition: transform .18s ease;
+}
+
+/* icon subtle wiggle on focus */
+.formula-bar:focus-within .formula-icon { transform: rotate(-6deg) scale(1.02); }
+
+/* action button (right) */
+.formula-bar .formula-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  color: var(--toolbar-text);
+  transition: transform .08s ease, background .12s ease, box-shadow .12s ease;
+}
+.formula-bar .formula-action:hover { transform: translateY(-2px); background: rgba(0,0,0,0.04); }
+body.dark .formula-bar .formula-action:hover { background: rgba(255,255,255,0.03); }
+
+/* compact variant */
+.formula-bar.formula-bar--compact { min-width: 200px; padding: 6px 8px; }
+
+/* placeholder color subtle */
+.formula-bar input::placeholder {
+  color: color-mix(in srgb, var(--toolbar-text) var(--placeholder-alpha, 45%), transparent);
+}
+
+/* small pop-in (makes UI feel snappy) */
+@keyframes popIn {
+  0% { opacity: 0; transform: translateY(6px) scale(.995); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Theme tuned backgrounds */
+:root .formula-bar { /* light defaults */ }
+body.dark .formula-bar {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--toolbar-bg) 92%, #000000 4%), color-mix(in srgb, var(--toolbar-bg) 86%, #000000 8%));
+  border: 1px solid rgba(255,255,255,0.04);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+}
+
+/* small responsive tweak to keep bar thin on mobile */
+@media (max-width: 640px) {
+  .formula-bar.formula-bar--thin { padding: 6px 8px; min-height: 36px; }
+  .formula-bar .formula-action { width: 28px; height: 28px; }
+}
+/* 🔵 Primary button */
+body.dark .toolbar-btn--primary {
+  background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+  color: #fff;
+  border: none;
+  box-shadow: 0 6px 20px rgba(37,99,235,0.4);
+}
+body.dark .toolbar-btn--primary:hover {
+  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+}
+
+/* 🟢 Success (apply) */
+body.dark .toolbar-btn--success {
+  background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
+  color: #fff;
+  border: none;
+  box-shadow: 0 6px 20px rgba(34,197,94,0.4);
+}
+body.dark .toolbar-btn--success:hover {
+  background: linear-gradient(180deg, #4ade80 0%, #22c55e 100%);
+}
+
+/* 🔴 Danger */
+body.dark .toolbar-btn--danger {
+  background: linear-gradient(180deg, #dc2626 0%, #b91c1c 100%);
+  color: #fff;
+  border: none;
+  box-shadow: 0 6px 20px rgba(220,38,38,0.4);
+}
+body.dark .toolbar-btn--danger:hover {
+  background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
+}
+
+/* ⚫ Secondary / neutral */
+body.dark .toolbar-btn--secondary {
+  background: linear-gradient(180deg, #374151 0%, #4b5563 100%);
+  color: #e5e7eb;
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.5);
+}
+body.dark .toolbar-btn--secondary:hover {
+  background: linear-gradient(180deg, #4b5563 0%, #6b7280 100%);
+}
+
+/* 🧰 Toolbar / subtle outline */
+body.dark .toolbar-btn {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: #e2e8f0;
+}
+body.dark .toolbar-btn:hover {
+  background: rgba(255,255,255,0.08);
+}
+/* ---------------- Dark-mode button system ---------------- */
+/* Paste at the end of your global CSS file */
+
+/* base toolbar button (subtle, glassy in dark) */
+body.dark .toolbar-btn {
+  background: rgba(255,255,255,0.04);
+  color: #e6eefc;                     /* light text */
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.6);
+  transition: transform .12s ease, box-shadow .14s ease, background .12s ease;
+  backdrop-filter: blur(6px) saturate(120%);
+}
+
+/* subtle hover */
+body.dark .toolbar-btn:hover {
+  background: rgba(255,255,255,0.066);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.6);
+}
+
+/* PRIMARY (blue) — main positive actions */
+body.dark .toolbar-btn--primary {
+  background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+  color: #ffffff;
+  border: none;
+  box-shadow: 0 8px 30px rgba(37,99,235,0.28);
+}
+body.dark .toolbar-btn--primary:hover {
+  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+}
+
+/* SUCCESS (green) — apply/ok */
+body.dark .toolbar-btn--success {
+  background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
+  color: #fff;
+  border: none;
+  box-shadow: 0 8px 30px rgba(34,197,94,0.22);
+}
+body.dark .toolbar-btn--success:hover {
+  background: linear-gradient(180deg, #4ade80 0%, #22c55e 100%);
+}
+
+/* DANGER (red) — destructive actions */
+body.dark .toolbar-btn--danger {
+  background: linear-gradient(180deg, #dc2626 0%, #b91c1c 100%);
+  color: #fff;
+  border: none;
+  box-shadow: 0 8px 30px rgba(220,38,38,0.30);
+}
+body.dark .toolbar-btn--danger:hover {
+  background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
+}
+
+/* SECONDARY (neutral gray) */
+body.dark .toolbar-btn--secondary {
+  background: linear-gradient(180deg, #374151 0%, #4b5563 100%);
+  color: #e6eefc;
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.55);
+}
+body.dark .toolbar-btn--secondary:hover {
+  background: linear-gradient(180deg, #4b5563 0%, #6b7280 100%);
+}
+
+/* small / icon-only compact adjustments */
+body.dark .toolbar-btn--small {
+  padding: 6px;
+  min-width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* focus ring for keyboard users */
+body.dark .toolbar-btn:focus {
+  outline: 3px solid rgba(96,165,250,0.14);
+  outline-offset: 3px;
+}
+
+/* ensure text/icon contrast */
+body.dark .toolbar-btn svg { color: inherit; fill: none; stroke: currentColor; }
+
+/* optional: stronger glass look (enable if you want more depth) */
+/* body.dark .toolbar-btn { background: rgba(255,255,255,0.03); backdrop-filter: blur(8px) saturate(140%); } */
+.toolbar-btn--success:active {
+  transform: scale(0.96);
+  box-shadow: 0 4px 12px rgba(34,197,94,0.4);
+}
+/* Make tick icon stand out in dark mode */
+body.dark .toolbar-btn--success svg {
+  stroke: #ffffff;
+  filter: drop-shadow(0 0 3px rgba(255,255,255,0.4));
+}
+/* ===== Toolbar button variants (append to global CSS) ===== */
+
+body.dark .toolbar-btn--ghost {
+  background: transparent;
+  color: #cfe6ff;
+  border: 1px dashed rgba(255,255,255,0.03);
+  box-shadow: none;
+}
+body.dark .toolbar-btn--ghost:hover {
+  background: rgba(255,255,255,0.02);
+}
+
+/* Active / toggled state (for freeze, bold toggle, etc.) */
+body.dark .toolbar-btn--active {
+  background: linear-gradient(180deg, rgba(96,165,250,0.18) 0%, rgba(96,165,250,0.10) 100%);
+  color: #eaf6ff;
+  border: 1px solid rgba(96,165,250,0.14);
+  box-shadow: 0 8px 28px rgba(96,165,250,0.08);
+}
+
+/* small rounded icon-only */
+body.dark .toolbar-btn--small {
+  padding: 6px;
+  min-width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* subtle outline for ghost on focus */
+body.dark .toolbar-btn--ghost:focus {
+  outline: 2px solid rgba(96,165,250,0.12);
+  outline-offset: 3px;
+}
+
+/* visual for destructive smaller icon */
+body.dark .toolbar-btn--danger.toolbar-btn--small {
+  background: linear-gradient(180deg,#dc2626 0%, #b91c1c 100%);
+  color: #fff;
+}
+
+/* toggle pulse microanimation (temporary visual on toggle) */
+@keyframes togglePulse {
+  0% { transform: scale(0.985); box-shadow: 0 6px 18px rgba(0,0,0,0.55); }
+  40% { transform: scale(1.02); box-shadow: 0 18px 40px rgba(96,165,250,0.12); }
+  100% { transform: scale(1); box-shadow: 0 8px 24px rgba(0,0,0,0.55); }
+}
+body.dark .toolbar-btn--active.toggle-animate {
+  animation: togglePulse .36s ease;
+}
+/* ==== Refined ghost button for dark mode (visible + subtle) ==== */
+body.dark .toolbar-btn--ghost {
+  background: rgba(148, 163, 184, 0.08); /* soft bluish-gray */
+  color: #e2e8f0;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(6px) saturate(120%);
+  transition: background 0.15s ease, box-shadow 0.2s ease, transform 0.1s ease;
+}
+
+body.dark .toolbar-btn--ghost:hover {
+  background: rgba(148, 163, 184, 0.15); /* brighten slightly */
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(148, 163, 184, 0.15);
+}
+
+body.dark .toolbar-btn--ghost.toolbar-btn--active {
+  background: linear-gradient(180deg, rgba(96,165,250,0.25) 0%, rgba(59,130,246,0.18) 100%);
+  color: #eaf6ff;
+  border-color: rgba(96,165,250,0.3);
+  box-shadow: 0 10px 28px rgba(96,165,250,0.25);
+}
+
+body.dark .toolbar-btn--ghost.toolbar-btn--active:hover {
+  background: linear-gradient(180deg, rgba(96,165,250,0.35) 0%, rgba(59,130,246,0.25) 100%);
+
+backdrop-filter: blur(10px) saturate(150%);
+}
+/* Conditional formatting: ghost default + warm accent when active */
+body.dark .toolbar-btn--cond {
+  background: rgba(255, 255, 255, 0.02);
+  color: #e6eefc;
+  border: 1px solid rgba(255,255,255,0.04);
+  box-shadow: none;
+  transition: background .12s ease, box-shadow .12s ease, transform .1s ease;
+}
+
+/* hover: slight warm lift */
+body.dark .toolbar-btn--cond:hover {
+  background: rgba(255, 255, 255, 0.048);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(0,0,0,0.6);
+}
+
+/* active when modal open or rules present — warm/purple accent */
+body.dark .toolbar-btn--cond.toolbar-btn--active {
+  background: linear-gradient(180deg, rgba(139,92,246,0.16) 0%, rgba(250,204,21,0.06) 100%);
+  color: #fff;
+  border-color: rgba(139,92,246,0.22);
+  box-shadow: 0 12px 32px rgba(139,92,246,0.12);
+}
+
+/* icon-only compact */
+body.dark .toolbar-btn--cond.toolbar-btn--small {
+  padding: 6px;
+  min-width: 34px;
+  height: 34px;
+}
+
+/* make svg icons follow color */
+body.dark .toolbar-btn--cond svg { stroke: currentColor; fill: none; }
+.cond-badge { background:#7c3aed; color:#fff; font-size:11px; padding:2px 6px; border-radius:999px; margin-left:6px; }
+/* === Text styling buttons (Bold + Alignment) for dark mode === */
+body.dark .toolbar-btn--text {
+  background: rgba(148, 163, 184, 0.08);
+  color: #e2e8f0;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  transition: background 0.15s ease, box-shadow 0.2s ease, transform 0.1s ease;
+  backdrop-filter: blur(4px);
+}
+
+body.dark .toolbar-btn--text:hover {
+  background: rgba(148, 163, 184, 0.18);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(148, 163, 184, 0.15);
+}
+
+body.dark .toolbar-btn--text.toolbar-btn--active {
+  background: linear-gradient(180deg, rgba(59,130,246,0.28) 0%, rgba(37,99,235,0.2) 100%);
+  color: #eaf6ff;
+  border-color: rgba(96,165,250,0.3);
+  box-shadow: 0 8px 20px rgba(59,130,246,0.3);
+}
+
+body.dark .toolbar-btn--text.toolbar-btn--active:hover {
+  background: linear-gradient(180deg, rgba(96,165,250,0.35) 0%, rgba(59,130,246,0.25) 100%);
+  box-shadow: 0 10px 26px rgba(96,165,250,0.35);
+}
+/* === Text styling buttons (Bold + Alignment) for dark mode === */
+body.dark .toolbar-btn--text {
+  background: rgba(148, 163, 184, 0.08);
+  color: #e2e8f0;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  transition: background 0.15s ease, box-shadow 0.2s ease, transform 0.1s ease;
+  backdrop-filter: blur(4px);
+}
+
+body.dark .toolbar-btn--text:hover {
+  background: rgba(148, 163, 184, 0.18);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(148, 163, 184, 0.15);
+}
+
+body.dark .toolbar-btn--text.toolbar-btn--active {
+  background: linear-gradient(180deg, rgba(59,130,246,0.28) 0%, rgba(37,99,235,0.2) 100%);
+  color: #eaf6ff;
+  border-color: rgba(96,165,250,0.3);
+  box-shadow: 0 8px 20px rgba(59,130,246,0.3);
+}
+
+body.dark .toolbar-btn--text.toolbar-btn--active:hover {
+  background: linear-gradient(180deg, rgba(96,165,250,0.35) 0%, rgba(59,130,246,0.25) 100%);
+  box-shadow: 0 10px 26px rgba(96,165,250,0.35);
+}
+/* === Text styling buttons (Bold + Alignment) for dark mode === */
+body.dark .toolbar-btn--text {
+  background: rgba(148, 163, 184, 0.08);
+  color: #e2e8f0;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  transition: background 0.15s ease, box-shadow 0.2s ease, transform 0.1s ease;
+  backdrop-filter: blur(4px);
+}
+
+body.dark .toolbar-btn--text:hover {
+  background: rgba(148, 163, 184, 0.18);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(148, 163, 184, 0.15);
+}
+
+body.dark .toolbar-btn--text.toolbar-btn--active {
+  background: linear-gradient(180deg, rgba(59,130,246,0.28) 0%, rgba(37,99,235,0.2) 100%);
+  color: #eaf6ff;
+  border-color: rgba(96,165,250,0.3);
+  box-shadow: 0 8px 20px rgba(59,130,246,0.3);
+}
+
+body.dark .toolbar-btn--text.toolbar-btn--active:hover {
+  background: linear-gradient(180deg, rgba(96,165,250,0.35) 0%, rgba(59,130,246,0.25) 100%);
+  box-shadow: 0 10px 26px rgba(96,165,250,0.35);
+}
