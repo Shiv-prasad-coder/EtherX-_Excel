@@ -90,15 +90,27 @@ export default function AuthPage({ theme = "light", onAuth, savedUser }: AuthPag
   }, []);
 
   // ensure a single RecaptchaVerifier instance (invisible)
-  function ensureRecaptcha() {
-    if (typeof window === "undefined") return null;
-    // reuse existing instance if present on window
+function ensureRecaptcha() {
+  if (typeof window === "undefined") return null;
+  // reuse existing instance if present
+  // @ts-ignore
+  if ((window as any).__firebaseRecaptchaVerifier) {
     // @ts-ignore
-    if ((window as any).__firebaseRecaptchaVerifier) {
-      // @ts-ignore
-      recaptchaRef.current = (window as any).__firebaseRecaptchaVerifier;
-      return recaptchaRef.current;
-    }
+    recaptchaRef.current = (window as any).__firebaseRecaptchaVerifier;
+    return recaptchaRef.current;
+  }
+
+  // create invisible recaptcha using the actual Auth instance
+  const verifier = new RecaptchaVerifier(recaptchaContainerId, { size: "invisible" }, auth);
+
+  // render() returns a promise; we can ignore result safely
+  verifier.render().catch(() => {});
+  recaptchaRef.current = verifier;
+  // @ts-ignore
+  (window as any).__firebaseRecaptchaVerifier = verifier;
+  return verifier;
+}
+
 
     const verifier = new RecaptchaVerifier(recaptchaContainerId, { size: "invisible" }, auth);
     // we can ignore render() result safely
