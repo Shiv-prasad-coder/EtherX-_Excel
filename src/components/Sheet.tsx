@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { evaluateAndUpdate, setCellRaw } from "../utils/formulaEngine";
 import type { CellValue } from "../utils/formulaEngine";
+import { motion } from "framer-motion";
 
   
 
@@ -1482,18 +1483,73 @@ const currentFmt =
           {`${sheetName}${selectedRef.current ? ` • ${selectedRef.current}` : ""}`}
         </span>
 
-        <input
-          className="toolbar-input flex-1 min-w-[260px]"
-          style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-          value={formulaBar}
-          onChange={(e) => setFormulaBar(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && selectedRef.current) {
-              commitEdit(selectedRef.current, formulaBar);
-            }
-          }}
-          placeholder="Type value or =formula"
-        />
+      <motion.div
+  initial={{ scale: 1, opacity: 0.9 }}
+  whileFocusWithin={{ scale: 1.02, opacity: 1 }}
+  transition={{ type: "spring", stiffness: 200, damping: 20 }}
+  style={{
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    background: theme === "dark" ? "#111827" : "#f8fafc",
+    border: `1px solid ${theme === "dark" ? "#334155" : "#d1d5db"}`,
+    borderRadius: 8,
+    padding: "6px 10px",
+    marginBottom: 6,
+    boxShadow:
+      theme === "dark"
+        ? "0 0 8px rgba(255,255,255,0.05)"
+        : "0 0 6px rgba(0,0,0,0.05)",
+  }}
+>
+  <span
+    style={{
+      color: theme === "dark" ? "#9ca3af" : "#475569",
+      fontSize: 14,
+      fontWeight: 500,
+      userSelect: "none",
+      whiteSpace: "nowrap",
+      minWidth: 60,
+    }}
+  >
+    fx
+  </span>
+
+  <input
+    type="text"
+    value={formula}
+    onChange={(e) => setFormula(e.target.value)}
+    placeholder="Type a formula (e.g., =SUM(A1:B2))"
+    style={{
+      flex: 1,
+      border: "none",
+      background: "transparent",
+      outline: "none",
+      color: theme === "dark" ? "#e5e7eb" : "#0f172a",
+      fontSize: 15,
+      fontFamily: "monospace",
+      transition: "color 0.2s ease",
+    }}
+    onFocus={(e) => {
+      e.currentTarget.parentElement!.style.boxShadow =
+        theme === "dark"
+          ? "0 0 6px rgba(59,130,246,0.4)"
+          : "0 0 6px rgba(59,130,246,0.3)";
+    }}
+    onBlur={(e) => {
+      e.currentTarget.parentElement!.style.boxShadow =
+        theme === "dark"
+          ? "0 0 8px rgba(255,255,255,0.05)"
+          : "0 0 6px rgba(0,0,0,0.05)";
+    }}
+    onKeyDown={(e) => {
+      if (e.key === "Enter") {
+        applyFormula(); // ✅ optional helper
+        e.currentTarget.blur();
+      }
+    }}
+  />
+</motion.div>
 
       
 
