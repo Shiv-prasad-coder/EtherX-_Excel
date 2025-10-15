@@ -1,5 +1,6 @@
 // src/App.tsx
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
+
 import Sheet from "./components/Sheet";
 import AuthPage from "./components/AuthPage";
 import Dashboard from "./components/Dashboard";
