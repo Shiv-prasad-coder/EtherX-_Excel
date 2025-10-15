@@ -1302,6 +1302,61 @@ try {
   // as-is on any error
 }
 
+// --- CSV + Clear Helpers ---
+
+// Convert current sheet cells to CSV
+function cellsToCSV() {
+  const rowsArr: string[][] = [];
+  for (let r = 0; r < rowCount; r++) {
+    const row: string[] = [];
+    for (let c = 0; c < colCount; c++) {
+      const id = `${String.fromCharCode(65 + c)}${r + 1}`;
+      const cell = cells[id];
+      const value = cell?.raw ?? cell?.value ?? "";
+      // Wrap in quotes if it contains commas or quotes
+      const safe = typeof value === "string" ? `"${value.replace(/"/g, '""')}"` : value;
+      row.push(String(safe));
+    }
+    rowsArr.push(row);
+  }
+  return rowsArr.map((r) => r.join(",")).join("\n");
+}
+
+// Download CSV file
+function downloadCSV(filename: string, content: string) {
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  link.setAttribute("href", url);
+  link.setAttribute("download", filename);
+  link.style.visibility = "hidden";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+// Import CSV content into sheet
+function importCSV(text: string) {
+  const lines = text.split("\n").map((l) => l.split(","));
+  const newCells: Record<string, any> = {};
+
+  for (let r = 0; r < lines.length; r++) {
+    for (let c = 0; c < lines[r].length; c++) {
+      const id = `${String.fromCharCode(65 + c)}${r + 1}`;
+      const val = lines[r][c].replace(/^"|"$/g, "");
+      if (val.trim() !== "") newCells[id] = { value: val, raw: val };
+    }
+  }
+
+  setCells((prev) => ({ ...prev, ...newCells }));
+}
+
+// Clear all cells
+function clearSheet() {
+  if (!confirm("Are you sure you want to clear all data?")) return;
+  setCells({});
+  pushHistory();
+}
 
 
     return (
@@ -1494,46 +1549,7 @@ const currentFmt =
           placeholder="Type value or =formula"
         />
 
-        {/* B) Import / Export / Clear (unchanged) */}
-        <div className="flex items-center gap-2">
-          <button
-            className="toolbar-btn"
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            onClick={() => {
-              const input = document.createElement("input");
-              input.type = "file"; input.accept = ".csv,text/csv";
-              input.onchange = async () => {
-                const f = input.files?.[0]; if (!f) return;
-                importCSV(await f.text());
-              };
-              input.click();
-            }}
-          >
-            Import CSV
-          </button>
-
-          <button
-            className="toolbar-btn"
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            onClick={() => {
-              const csv = cellsToCSV();
-              const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g, "-");
-              downloadCSV(`sheet-${ts}.csv`, csv);
-            }}
-          >
-            Download CSV
-          </button>
-
-          <button
-            className="toolbar-btn"
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            onClick={clearSheet}
-          >
-            Clear Sheet
-          </button>
-        </div>
-
-        <span className="toolbar-sep" />
+       
 
         {/* C) Freeze + Insert/Delete + Conditional Format (unchanged) */}
         <div className="flex items-center gap-2">
