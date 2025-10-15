@@ -383,9 +383,9 @@ export default function App() {
             background: theme === "dark" ? "#0b1220" : "#ffffff",
           }}
         >
-          <button onClick={() => setView("dashboard")} style={btn(theme)}>
-            ⬅ Dashboard
-          </button>
+<button onClick={() => setView("dashboard")} className="toolbar-btn toolbar-btn--primary">
+  ⬅ Dashboard
+</button>
           <select
             value={activeIndex}
             onChange={(e) => setActiveIndex(Number(e.target.value))}
@@ -403,25 +403,17 @@ export default function App() {
               </option>
             ))}
           </select>
-          <button onClick={addSheet} style={btn(theme)}>
-            + Sheet
-          </button>
-          <button onClick={() => duplicateSheet(activeIndex)} style={btn(theme)}>
-            Duplicate
-          </button>
-          <button onClick={() => renameSheet(activeIndex)} style={btn(theme)}>
-            Rename
-          </button>
-          <button onClick={() => deleteSheet(activeIndex)} style={btnDanger(theme)}>
-            Delete
-          </button>
-          <div style={{ flex: 1 }} />
-          <button onClick={toggleTheme} style={btn(theme)}>
-            {theme === "dark" ? "🌞 Light" : "🌙 Dark"}
-          </button>
-          <button onClick={handleLogout} style={btnDanger(theme)}>
-            Logout
-          </button>
+         <button onClick={addSheet} className="toolbar-btn">+ Sheet</button>
+<button onClick={() => duplicateSheet(activeIndex)} className="toolbar-btn">Duplicate</button>
+<button onClick={() => renameSheet(activeIndex)} className="toolbar-btn">Rename</button>
+<button onClick={() => deleteSheet(activeIndex)} className="toolbar-btn toolbar-btn--danger">Delete</button>
+
+<div style={{ flex: 1 }} />
+
+<button onClick={toggleTheme} className="toolbar-btn">
+  {theme === "dark" ? "🌞 Light" : "🌙 Dark"}
+</button>
+<button onClick={handleLogout} className="toolbar-btn toolbar-btn--danger">Logout</button>
         </div>
 
         {/* Sheet Area */}
