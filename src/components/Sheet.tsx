@@ -411,17 +411,10 @@ function computePivotMatrix(
     setEditing(id);
     setFormulaBar(cells[id]?.raw ?? (cells[id]?.value?.toString() ?? ""));
   }, [cells]);
-const commitEdit = useCallback((id: string, raw: string) => {
+  const commitEdit = useCallback((id: string, raw: string) => {
   pushHistory();
-
-  setCells(prev => {
+  setCells((prev) => {
     const copy = { ...prev };
-
-    // Ensure cell object
-    if (!copy[id]) copy[id] = {};
-
-    // Always store exactly what the user typed
-    copy[id].raw = raw;
 
     // If it's a formula, let the formula engine compute value
     if (raw.startsWith("=")) {
@@ -429,53 +422,10 @@ const commitEdit = useCallback((id: string, raw: string) => {
       evaluateAndUpdate(copy, id);
       return copy;
     }
-   // Apply formula from the formula bar when Enter is pressed
-function handleFormulaApply() {
-  if (!formulaBar.trim()) return;
-
-  const cellId = selectedRef.current;
-  if (!cellId) {
-    alert("Select a cell first");
-    return;
-  }
-
-  pushHistory(); // supports undo/redo
-
-  // If it's a formula (starts with =)
-  if (formulaBar.trim().startsWith("=")) {
-    try {
-      setCells(prev => {
-        const next = { ...prev };
-        // Store formula and compute value
-        setCellRaw(next, cellId, formulaBar.trim());
-        evaluateAndUpdate(next, cellId);
-        return next;
-      });
-    } catch (err) {
-      console.error("Formula error:", err);
-      alert("Invalid formula!");
-    }
-  } else {
-    // If it's a normal value, use commitEdit
-    commitEdit(cellId, formulaBar);
-  }
-
-  // Exit edit mode
-  setEditing(null);
-}
-
-
-  // Refresh UI and clear focus
-  setFormulaBar("");
-  blurSelection();
-}
-
 
     // Otherwise, store a number if it parses cleanly; else store as text
     const n = Number(raw);
     if (!Number.isNaN(n) && raw.trim() !== "") {
-      // IMPORTANT: do NOT auto-apply percent/date/currency conversions here.
-      // We keep the data pure. Any formatting happens only at render time.
       copy[id].value = n;
     } else {
       copy[id].value = raw ?? "";
@@ -485,7 +435,39 @@ function handleFormulaApply() {
   });
 
   setEditing(null);
-}, []);// place inside the component where commitEdit and selectedRef are in scope
+}, []);
+// ✅ Apply formula from the formula bar when Enter is pressed
+function handleFormulaApply() {
+  if (!formulaBar.trim()) return;
+
+  const cellId = selectedRef.current;
+  if (!cellId) {
+    alert("Select a cell first");
+    return;
+  }
+
+  pushHistory();
+
+  if (formulaBar.trim().startsWith("=")) {
+    try {
+      setCells(prev => {
+        const next = { ...prev };
+        setCellRaw(next, cellId, formulaBar.trim());
+        evaluateAndUpdate(next, cellId);
+        return next;
+      });
+    } catch (err) {
+      console.error("Formula error:", err);
+      alert("Invalid formula!");
+    }
+  } else {
+    commitEdit(cellId, formulaBar);
+  }
+
+  setEditing(null);
+}
+
+// place inside the component where commitEdit and selectedRef are in scope
 function insertCurrentDateTime(includeTime: boolean) {
   const sel = selectedRef.current;
   if (!sel) {
