@@ -464,7 +464,15 @@ function insertCurrentDateTime(includeTime: boolean) {
     commitEdit(sel, value);
   }
 }
-
+function handleFormulaApply() {
+  const sel = selectedRef.current;
+  if (!sel) {
+    alert("Please select a cell first.");
+    return;
+  }
+  commitEdit(sel, formulaBar);
+  setFormulaBar("");
+}
 
 
 
