@@ -5,6 +5,15 @@ import Sheet from "./components/Sheet";
 import AuthPage from "./components/AuthPage";
 import Dashboard from "./components/Dashboard";
 import SplashScreen from "./components/SplashScreen";
+// Extend the Window interface so TypeScript recognizes our global helpers
+declare global {
+  interface Window {
+    importCSV?: (csvText: string) => void;
+    cellsToCSV?: () => string;
+    clearSheet?: () => void;
+  }
+}
+
 
 type SheetMeta = {
   id: string;
