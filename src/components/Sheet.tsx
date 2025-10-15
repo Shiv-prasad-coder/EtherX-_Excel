@@ -514,7 +514,14 @@ function insertCurrentDateTime(includeTime: boolean) {
       return next;
     });
   }
-
+// Extend the Window interface so TypeScript recognizes our global helpers
+declare global {
+  interface Window {
+    importCSV?: (csvText: string) => void;
+    cellsToCSV?: () => string;
+    clearSheet?: () => void;
+  }
+}
  
 
   /** Auto-fit + column resize */
@@ -1259,14 +1266,49 @@ try {
   // leave 
   // as-is on any error
 }
-// Extend the Window interface so TypeScript recognizes our global helpers
-declare global {
-  interface Window {
-    importCSV?: (csvText: string) => void;
-    cellsToCSV?: () => string;
-    clearSheet?: () => void;
+// ✅ Make sheet helpers globally accessible for the App toolbar
+useEffect(() => {
+  // Wrap in try/catch to be extra safe
+  try {
+    window.importCSV = (csvText: string) => {
+      pasteMatrix(parseTable(csvText)); // reuse your existing CSV parser + paste logic
+    };
+
+    window.cellsToCSV = () => {
+      // Build a CSV string from current cells
+      const rowsArr: string[][] = [];
+      for (let r = 0; r < rowCount; r++) {
+        const rowVals: string[] = [];
+        for (let c = 0; c < colCount; c++) {
+          const id = cellId(r, c);
+          const val = cells[id]?.raw ?? "";
+          // Escape if necessary
+          const safe = String(val).includes(",") ? `"${String(val).replace(/"/g, '""')}"` : String(val);
+          rowVals.push(safe);
+        }
+        rowsArr.push(rowVals);
+      }
+      return rowsArr.map(r => r.join(",")).join("\n");
+    };
+
+    window.clearSheet = () => {
+      if (!confirm("Clear all cells in this sheet?")) return;
+      pushHistory();
+      setCells({});
+      setFormats({});
+    };
+  } catch (err) {
+    console.warn("Failed to expose global sheet functions:", err);
   }
-}
+
+  // Cleanup on unmount (important for switching sheets)
+  return () => {
+    delete window.importCSV;
+    delete window.cellsToCSV;
+    delete window.clearSheet;
+  };
+}, [cells, rowCount, colCount, setCells, setFormats]);
+
 
 
 
