@@ -515,14 +515,7 @@ function insertCurrentDateTime(includeTime: boolean) {
     });
   }
 // Extend the Window interface so TypeScript recognizes our global helpers
-declare global {
-  interface Window {
-    importCSV?: (csvText: string) => void;
-    cellsToCSV?: () => string;
-    clearSheet?: () => void;
-  }
-}
- 
+
 
   /** Auto-fit + column resize */
   const measureCanvasRef = useRef<HTMLCanvasElement | null>(null);
