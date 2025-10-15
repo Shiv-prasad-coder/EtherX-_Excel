@@ -1460,46 +1460,7 @@ const currentFmt =
           placeholder="Type value or =formula"
         />
 
-        {/* B) Import / Export / Clear (unchanged) */}
-        <div className="flex items-center gap-2">
-          <button
-            className="toolbar-btn"
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            onClick={() => {
-              const input = document.createElement("input");
-              input.type = "file"; input.accept = ".csv,text/csv";
-              input.onchange = async () => {
-                const f = input.files?.[0]; if (!f) return;
-                importCSV(await f.text());
-              };
-              input.click();
-            }}
-          >
-            Import CSV
-          </button>
-
-          <button
-            className="toolbar-btn"
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            onClick={() => {
-              const csv = cellsToCSV();
-              const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g, "-");
-              downloadCSV(`sheet-${ts}.csv`, csv);
-            }}
-          >
-            Download CSV
-          </button>
-
-          <button
-            className="toolbar-btn"
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            onClick={clearSheet}
-          >
-            Clear Sheet
-          </button>
-        </div>
-
-        <span className="toolbar-sep" />
+      
 
        {/* C) Freeze + Insert/Delete + Conditional Format */}
 {/* C) Freeze + Insert/Delete + Conditional Format */}
