@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { evaluateAndUpdate, setCellRaw } from "../utils/formulaEngine";
 import type { CellValue } from "../utils/formulaEngine";
+import { motion } from "framer-motion";
 
   
 
@@ -1535,74 +1536,141 @@ const currentFmt =
 
         <span className="toolbar-sep" />
 
-        {/* C) Freeze + Insert/Delete + Conditional Format (unchanged) */}
-        <div className="flex items-center gap-2">
-          <button
-            className={`toolbar-btn ${freezeTopRow ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300" : ""}`}
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            onClick={() => { pushHistory(); setFreezeTopRow(v => !v); }}
-          >
-            {freezeTopRow ? "Unfreeze Top Row" : "Freeze Top Row"}
-          </button>
+       {/* C) Freeze + Insert/Delete + Conditional Format */}
+<div className="flex items-center gap-2">
+  <button
+    className={`toolbar-btn ${
+      freezeTopRow
+        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
+        : ""
+    }`}
+    style={{
+      background: pal.surface,
+      color: pal.text,
+      border: `1px solid ${pal.border}`,
+    }}
+    onClick={() => {
+      pushHistory();
+      setFreezeTopRow((v) => !v);
+    }}
+  >
+    {freezeTopRow ? "Unfreeze Top Row" : "Freeze Top Row"}
+  </button>
 
-          <button
-            onClick={() => setShowCondModal(true)}
-            style={{
-              padding: "6px 10px",
-              borderRadius: 6,
-              cursor: "pointer",
-              border: `1px solid ${pal.border}`,
-              background: pal.surface,
-              color: pal.text,
-            }}
-          >
-            Conditional Format
-          </button>
+  <button
+    onClick={() => setShowCondModal(true)}
+    style={{
+      padding: "6px 10px",
+      borderRadius: 6,
+      cursor: "pointer",
+      border: `1px solid ${pal.border}`,
+      background: pal.surface,
+      color: pal.text,
+    }}
+  >
+    Conditional Format
+  </button>
 
-          <button
-            className={`toolbar-btn ${freezeFirstCol ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300" : ""}`}
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            onClick={() => { pushHistory(); setFreezeFirstCol(v => !v); }}
-          >
-            {freezeFirstCol ? "Unfreeze First Column" : "Freeze First Column"}
-          </button>
+  <button
+    className={`toolbar-btn ${
+      freezeFirstCol
+        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
+        : ""
+    }`}
+    style={{
+      background: pal.surface,
+      color: pal.text,
+      border: `1px solid ${pal.border}`,
+    }}
+    onClick={() => {
+      pushHistory();
+      setFreezeFirstCol((v) => !v);
+    }}
+  >
+    {freezeFirstCol ? "Unfreeze First Column" : "Freeze First Column"}
+  </button>
 
-          <button
-            className="toolbar-btn"
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            title="+ Row"
-            onClick={() => { const p = anchorRC(); if (!p) return; insertRowAt(p.row); }}
-          >
-            + Row
-          </button>
+  {/* ✨ Animated Row/Col buttons */}
+  <motion.button
+    whileHover={{ scale: 1.08 }}
+    whileTap={{ scale: 0.92 }}
+    transition={{ type: "spring", stiffness: 350, damping: 10 }}
+    className="toolbar-btn"
+    style={{
+      background: pal.surface,
+      color: pal.text,
+      border: `1px solid ${pal.border}`,
+    }}
+    title="+ Row"
+    onClick={() => {
+      const p = anchorRC();
+      if (!p) return;
+      insertRowAt(p.row);
+    }}
+  >
+    + Row
+  </motion.button>
 
-          <button
-            className="toolbar-btn bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300"
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            title="− Row"
-            onClick={() => { const p = anchorRC(); if (!p) return; deleteRowAt(p.row); }}
-          >
-            − Row
-          </button>
+  <motion.button
+    whileHover={{ scale: 1.08 }}
+    whileTap={{ scale: 0.92 }}
+    transition={{ type: "spring", stiffness: 350, damping: 10 }}
+    className="toolbar-btn bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300"
+    style={{
+      background: pal.surface,
+      color: pal.text,
+      border: `1px solid ${pal.border}`,
+    }}
+    title="− Row"
+    onClick={() => {
+      const p = anchorRC();
+      if (!p) return;
+      deleteRowAt(p.row);
+    }}
+  >
+    − Row
+  </motion.button>
 
-          <button
-            className="toolbar-btn"
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            title="+ Col"
-            onClick={() => { const p = anchorRC(); if (!p) return; insertColAt(p.col); }}
-          >
-            + Col
-          </button>
+  <motion.button
+    whileHover={{ scale: 1.08 }}
+    whileTap={{ scale: 0.92 }}
+    transition={{ type: "spring", stiffness: 350, damping: 10 }}
+    className="toolbar-btn"
+    style={{
+      background: pal.surface,
+      color: pal.text,
+      border: `1px solid ${pal.border}`,
+    }}
+    title="+ Col"
+    onClick={() => {
+      const p = anchorRC();
+      if (!p) return;
+      insertColAt(p.col);
+    }}
+  >
+    + Col
+  </motion.button>
 
-          <button
-            className="toolbar-btn bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300"
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            title="− Col"
-            onClick={() => { const p = anchorRC(); if (!p) return; deleteColAt(p.col); }}
-          >
-            − Col
-          </button>
-        </div>
+  <motion.button
+    whileHover={{ scale: 1.08 }}
+    whileTap={{ scale: 0.92 }}
+    transition={{ type: "spring", stiffness: 350, damping: 10 }}
+    className="toolbar-btn bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300"
+    style={{
+      background: pal.surface,
+      color: pal.text,
+      border: `1px solid ${pal.border}`,
+    }}
+    title="− Col"
+    onClick={() => {
+      const p = anchorRC();
+      if (!p) return;
+      deleteColAt(p.col);
+    }}
+  >
+    − Col
+  </motion.button>
+</div>
 
         <span className="toolbar-sep" />
 
