@@ -2,7 +2,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { evaluateAndUpdate, setCellRaw } from "../utils/formulaEngine";
 import type { CellValue } from "../utils/formulaEngine";
-import { motion } from "framer-motion";
 
   
 
@@ -464,15 +463,7 @@ function insertCurrentDateTime(includeTime: boolean) {
     commitEdit(sel, value);
   }
 }
-function handleFormulaApply() {
-  const sel = selectedRef.current;
-  if (!sel) {
-    alert("Please select a cell first.");
-    return;
-  }
-  commitEdit(sel, formulaBar);
-  setFormulaBar("");
-}
+
 
 
 
@@ -523,8 +514,50 @@ function handleFormulaApply() {
       return next;
     });
   }
-// Extend the Window interface so TypeScript recognizes our global helpers
 
+  function cellsToCSV(): string {
+    const esc = (s: string) => /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    const lines: string[] = [];
+    for (let r = 0; r < rowCount; r++) {
+      const rowVals: string[] = [];
+      for (let c = 0; c < colCount; c++) {
+        const v = cells[cellId(r, c)]?.value;
+        rowVals.push(esc(v == null ? "" : String(v)));
+      }
+      lines.push(rowVals.join(","));
+    }
+    return lines.join("\r\n");
+  }
+  function downloadCSV(filename: string, csvText: string) {
+    const blob = new Blob([csvText], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  }
+  function importCSV(text: string) {
+    pushHistory();
+    const data = parseTable(text);
+    const next: Record<string, CellValue> = { ...cells };
+    const maxR = Math.min(rowCount, data.length);
+    for (let r = 0; r < maxR; r++) {
+      const line = data[r] ?? [];
+      const maxC = Math.min(colCount, line.length);
+      for (let c = 0; c < maxC; c++) {
+        setCellRaw(next, cellId(r, c), String(line[c] ?? ""));
+        evaluateAndUpdate(next, cellId(r, c));
+      }
+    }
+    setCells(next);
+    selectedRef.current = "A1";
+    setFormulaBar(next["A1"]?.raw ?? "");
+    setRange({ r1: 0, c1: 0, r2: 0, c2: 0 });
+  }
+  function clearSheet() {
+    if (!confirm("Clear all cells? This cannot be undone.")) return;
+    pushHistory();
+    setCells({});
+    try { localStorage.removeItem(effectiveKey); } catch {}
+  }
 
   /** Auto-fit + column resize */
   const measureCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1268,49 +1301,6 @@ try {
   // leave 
   // as-is on any error
 }
-// ✅ Make sheet helpers globally accessible for the App toolbar
-useEffect(() => {
-  // Wrap in try/catch to be extra safe
-  try {
-    window.importCSV = (csvText: string) => {
-      pasteMatrix(parseTable(csvText)); // reuse your existing CSV parser + paste logic
-    };
-
-    window.cellsToCSV = () => {
-      // Build a CSV string from current cells
-      const rowsArr: string[][] = [];
-      for (let r = 0; r < rowCount; r++) {
-        const rowVals: string[] = [];
-        for (let c = 0; c < colCount; c++) {
-          const id = cellId(r, c);
-          const val = cells[id]?.raw ?? "";
-          // Escape if necessary
-          const safe = String(val).includes(",") ? `"${String(val).replace(/"/g, '""')}"` : String(val);
-          rowVals.push(safe);
-        }
-        rowsArr.push(rowVals);
-      }
-      return rowsArr.map(r => r.join(",")).join("\n");
-    };
-
-    window.clearSheet = () => {
-      if (!confirm("Clear all cells in this sheet?")) return;
-      pushHistory();
-      setCells({});
-      setFormats({});
-    };
-  } catch (err) {
-    console.warn("Failed to expose global sheet functions:", err);
-  }
-
-  // Cleanup on unmount (important for switching sheets)
-  return () => {
-    delete window.importCSV;
-    delete window.cellsToCSV;
-    delete window.clearSheet;
-  };
-}, [cells, rowCount, colCount, setCells, setFormats]);
-
 
 
 
@@ -1364,37 +1354,21 @@ useEffect(() => {
 }}
 
       >
- {editing === id ? (
-  <input
-    type="text"
-    autoFocus
-    defaultValue={formulaBar}
-    onChange={(e) => setFormulaBar(e.target.value)}
-    onKeyDown={(e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        commitEdit(id, e.currentTarget.value); // ✅ directly commit what’s typed
-        setEditing(null);
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        setEditing(null);
-        setFormulaBar(cells[id]?.raw ?? (cells[id]?.value?.toString() ?? ""));
-      }
-    }}
-    style={{
-      flex: 1,
-      border: "none",
-      background: "transparent",
-      outline: "none",
-      color: theme === "dark" ? "#e5e7eb" : "#0f172a",
-      fontSize: 15,
-      fontFamily: "monospace",
-    }}
-  />
-) : (
-  <span>{displayText as any}</span>
-)}
-
+        {editing === id ? (
+          <input
+            autoFocus
+            style={{ width: "100%", height: "100%", border: "none", outline: "none", fontSize: 13, textAlign }}
+            value={formulaBar}
+            onChange={(e) => setFormulaBar(e.target.value)}
+            onBlur={() => commitEdit(id, formulaBar)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitEdit(id, formulaBar);
+              else if (e.key === "Escape") { setEditing(null); setFormulaBar(""); }
+            }}
+          />
+        ) : (
+          <span>{displayText as any}</span>
+        )}
 
         {/* Fill handle */}
         {isSelected && editing !== id && (
@@ -1507,185 +1481,128 @@ const currentFmt =
           {`${sheetName}${selectedRef.current ? ` • ${selectedRef.current}` : ""}`}
         </span>
 
-<motion.div
-  initial={{ scale: 1, opacity: 0.9 }}
-  whileHover={{ scale: 1.02, opacity: 1 }}
-  whileFocus={{ scale: 1.02, opacity: 1 }}
-  transition={{ type: "spring", stiffness: 200, damping: 20 }}
-  style={{
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    background: theme === "dark" ? "#111827" : "#f8fafc",
-    border: `1px solid ${theme === "dark" ? "#334155" : "#d1d5db"}`,
-    borderRadius: 8,
-    padding: "6px 10px",
-    marginBottom: 6,
-    boxShadow:
-      theme === "dark"
-        ? "0 0 8px rgba(255,255,255,0.05)"
-        : "0 0 6px rgba(0,0,0,0.05)",
-  }}
->
-  <span
-    style={{
-      color: theme === "dark" ? "#9ca3af" : "#475569",
-      fontSize: 14,
-      fontWeight: 500,
-      userSelect: "none",
-      whiteSpace: "nowrap",
-      minWidth: 60,
-    }}
-  >
-    fx
-  </span>
+        <input
+          className="toolbar-input flex-1 min-w-[260px]"
+          style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+          value={formulaBar}
+          onChange={(e) => setFormulaBar(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && selectedRef.current) {
+              commitEdit(selectedRef.current, formulaBar);
+            }
+          }}
+          placeholder="Type value or =formula"
+        />
 
-  <input
-    type="text"
-    value={formulaBar}
-    onChange={(e) => setFormulaBar(e.target.value)}
-    placeholder="Type a formula (e.g., =SUM(A1:B2))"
-    style={{
-      flex: 1,
-      border: "none",
-      background: "transparent",
-      outline: "none",
-      color: theme === "dark" ? "#e5e7eb" : "#0f172a",
-      fontSize: 15,
-      fontFamily: "monospace",
-    }}
-    onKeyDown={(e) => {
-      if (e.key === "Enter") {
-        handleFormulaApply();
-        e.currentTarget.blur();
-      }
-    }}
-  />
-</motion.div>
+        {/* B) Import / Export / Clear (unchanged) */}
+        <div className="flex items-center gap-2">
+          <button
+            className="toolbar-btn"
+            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+            onClick={() => {
+              const input = document.createElement("input");
+              input.type = "file"; input.accept = ".csv,text/csv";
+              input.onchange = async () => {
+                const f = input.files?.[0]; if (!f) return;
+                importCSV(await f.text());
+              };
+              input.click();
+            }}
+          >
+            Import CSV
+          </button>
 
-       {/* C) Freeze + Insert/Delete + Conditional Format */}
-{/* C) Freeze + Insert/Delete + Conditional Format */}
-{/* C) Freeze + Insert/Delete + Conditional Format */}
-<div className="flex items-center gap-2">
-  {/* Freeze Top Row */}
-  <button
-    className={`toolbar-btn transition-all duration-200 active:scale-95 ${
-      freezeTopRow
-        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
-        : "hover:bg-emerald-50 dark:hover:bg-emerald-800/30"
-    }`}
-    style={{ border: `1px solid ${pal.border}` }}
-    onClick={() => {
-      pushHistory();
-      setFreezeTopRow((v) => !v);
-    }}
-  >
-    {freezeTopRow ? "Unfreeze Top Row" : "Freeze Top Row"}
-  </button>
+          <button
+            className="toolbar-btn"
+            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+            onClick={() => {
+              const csv = cellsToCSV();
+              const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g, "-");
+              downloadCSV(`sheet-${ts}.csv`, csv);
+            }}
+          >
+            Download CSV
+          </button>
 
-  {/* Freeze First Column */}
-  <button
-    className={`toolbar-btn transition-all duration-200 active:scale-95 ${
-      freezeFirstCol
-        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
-        : "hover:bg-emerald-50 dark:hover:bg-emerald-800/30"
-    }`}
-    style={{ border: `1px solid ${pal.border}` }}
-    onClick={() => {
-      pushHistory();
-      setFreezeFirstCol((v) => !v);
-    }}
-  >
-    {freezeFirstCol ? "Unfreeze First Col" : "Freeze First Col"}
-  </button>
+          <button
+            className="toolbar-btn"
+            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+            onClick={clearSheet}
+          >
+            Clear Sheet
+          </button>
+        </div>
 
-  {/* Conditional Format */}
-  <button
-    className="toolbar-btn hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-200 active:scale-95"
-    style={{ border: `1px solid ${pal.border}` }}
-    onClick={() => setShowCondModal(true)}
-  >
-    Conditional Format
-  </button>
+        <span className="toolbar-sep" />
 
-  {/* + Row */}
-  <button
-    className="toolbar-btn transition-transform duration-150 hover:scale-105 active:scale-95"
-    style={{
-      border: `1px solid ${pal.border}`,
-      background: "rgba(16, 185, 129, 0.15)", // green tint
-      color: "#10b981",
-      fontWeight: 600,
-    }}
-    title="+ Row"
-    onClick={() => {
-      const p = anchorRC();
-      if (!p) return;
-      insertRowAt(p.row);
-    }}
-  >
-    + Row
-  </button>
+        {/* C) Freeze + Insert/Delete + Conditional Format (unchanged) */}
+        <div className="flex items-center gap-2">
+          <button
+            className={`toolbar-btn ${freezeTopRow ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300" : ""}`}
+            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+            onClick={() => { pushHistory(); setFreezeTopRow(v => !v); }}
+          >
+            {freezeTopRow ? "Unfreeze Top Row" : "Freeze Top Row"}
+          </button>
 
-  {/* − Row */}
-  <button
-    className="toolbar-btn transition-transform duration-150 hover:scale-105 active:scale-95"
-    style={{
-      border: `1px solid ${pal.border}`,
-      background: "rgba(239, 68, 68, 0.15)", // red tint
-      color: "#ef4444",
-      fontWeight: 600,
-    }}
-    title="− Row"
-    onClick={() => {
-      const p = anchorRC();
-      if (!p) return;
-      deleteRowAt(p.row);
-    }}
-  >
-    − Row
-  </button>
+          <button
+            onClick={() => setShowCondModal(true)}
+            style={{
+              padding: "6px 10px",
+              borderRadius: 6,
+              cursor: "pointer",
+              border: `1px solid ${pal.border}`,
+              background: pal.surface,
+              color: pal.text,
+            }}
+          >
+            Conditional Format
+          </button>
 
-  {/* + Col */}
-  <button
-    className="toolbar-btn transition-transform duration-150 hover:scale-105 active:scale-95"
-    style={{
-      border: `1px solid ${pal.border}`,
-      background: "rgba(16, 185, 129, 0.15)",
-      color: "#10b981",
-      fontWeight: 600,
-    }}
-    title="+ Col"
-    onClick={() => {
-      const p = anchorRC();
-      if (!p) return;
-      insertColAt(p.col);
-    }}
-  >
-    + Col
-  </button>
+          <button
+            className={`toolbar-btn ${freezeFirstCol ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300" : ""}`}
+            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+            onClick={() => { pushHistory(); setFreezeFirstCol(v => !v); }}
+          >
+            {freezeFirstCol ? "Unfreeze First Column" : "Freeze First Column"}
+          </button>
 
-  {/* − Col */}
-  <button
-    className="toolbar-btn transition-transform duration-150 hover:scale-105 active:scale-95"
-    style={{
-      border: `1px solid ${pal.border}`,
-      background: "rgba(239, 68, 68, 0.15)",
-      color: "#ef4444",
-      fontWeight: 600,
-    }}
-    title="− Col"
-    onClick={() => {
-      const p = anchorRC();
-      if (!p) return;
-      deleteColAt(p.col);
-    }}
-  >
-    − Col
-  </button>
-</div>
+          <button
+            className="toolbar-btn"
+            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+            title="+ Row"
+            onClick={() => { const p = anchorRC(); if (!p) return; insertRowAt(p.row); }}
+          >
+            + Row
+          </button>
 
+          <button
+            className="toolbar-btn bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300"
+            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+            title="− Row"
+            onClick={() => { const p = anchorRC(); if (!p) return; deleteRowAt(p.row); }}
+          >
+            − Row
+          </button>
 
+          <button
+            className="toolbar-btn"
+            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+            title="+ Col"
+            onClick={() => { const p = anchorRC(); if (!p) return; insertColAt(p.col); }}
+          >
+            + Col
+          </button>
+
+          <button
+            className="toolbar-btn bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300"
+            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
+            title="− Col"
+            onClick={() => { const p = anchorRC(); if (!p) return; deleteColAt(p.col); }}
+          >
+            − Col
+          </button>
+        </div>
 
         <span className="toolbar-sep" />
 
@@ -2227,7 +2144,7 @@ color: pal.text,
     </div>
   </div>
 )}
-
+// ---------- end pivot block ----------
 
       </div>
     </div>
