@@ -111,6 +111,54 @@ const pal = useMemo(() => getPalette(theme), [theme]);
 
   /** Core data state */
   const [cells, setCells] = useState<Record<string, CellValue>>({});
+  // Inside your Sheet component, right after const [cells, setCells] = useState(...)
+function cellsToCSV() {
+  const rowsArr: string[][] = [];
+  for (let r = 0; r < rowCount; r++) {
+    const row: string[] = [];
+    for (let c = 0; c < colCount; c++) {
+      const id = `${String.fromCharCode(65 + c)}${r + 1}`;
+      const cell = cells[id];
+      const value = cell?.raw ?? cell?.value ?? "";
+      const safe =
+        typeof value === "string" ? `"${value.replace(/"/g, '""')}"` : value;
+      row.push(String(safe));
+    }
+    rowsArr.push(row);
+  }
+  return rowsArr.map((r) => r.join(",")).join("\n");
+}
+
+function downloadCSV(filename: string, content: string) {
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+function importCSV(text: string) {
+  const lines = text.split("\n").map((l) => l.split(","));
+  const newCells: Record<string, any> = {};
+  for (let r = 0; r < lines.length; r++) {
+    for (let c = 0; c < lines[r].length; c++) {
+      const id = `${String.fromCharCode(65 + c)}${r + 1}`;
+      const val = lines[r][c].replace(/^"|"$/g, "");
+      if (val.trim() !== "") newCells[id] = { value: val, raw: val };
+    }
+  }
+  setCells((prev) => ({ ...prev, ...newCells }));
+}
+
+function clearSheet() {
+  if (!confirm("Are you sure you want to clear all data?")) return;
+  setCells({});
+  pushHistory();
+}
+
   const [editing, setEditing] = useState<string | null>(null);
   const [formulaBar, setFormulaBar] = useState("");
   const selectedRef = useRef<string | null>(null);
