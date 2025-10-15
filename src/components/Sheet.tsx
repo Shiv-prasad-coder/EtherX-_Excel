@@ -438,55 +438,48 @@ function computePivotMatrix(
 }, []);
 // ✅ Apply formula from the formula bar when Enter is pressed
 function handleFormulaApply() {
-  if (!formulaBar.trim()) return;
+  try {
+    const cellId = selectedRef.current;
 
-  const cellId = selectedRef.current;
-  if (!cellId) {
-    alert("Select a cell first");
-    return;
-  }
+    // No cell selected
+    if (!cellId) {
+      alert("Please select a cell first.");
+      return;
+    }
 
-  pushHistory();
+    // No formula or empty input
+    if (!formulaBar.trim()) {
+      console.warn("Formula bar is empty — nothing to apply.");
+      return;
+    }
 
-  if (formulaBar.trim().startsWith("=")) {
-    try {
+    pushHistory();
+
+    // If it's a formula (starts with =)
+    if (formulaBar.trim().startsWith("=")) {
       setCells(prev => {
         const next = { ...prev };
-        setCellRaw(next, cellId, formulaBar.trim());
-        evaluateAndUpdate(next, cellId);
+        try {
+          setCellRaw(next, cellId, formulaBar.trim());
+          evaluateAndUpdate(next, cellId);
+        } catch (err) {
+          console.error("Formula evaluation error:", err);
+          alert("Invalid formula!");
+        }
         return next;
       });
-    } catch (err) {
-      console.error("Formula error:", err);
-      alert("Invalid formula!");
+    } else {
+      // Otherwise, normal value
+      commitEdit(cellId, formulaBar);
     }
-  } else {
-    commitEdit(cellId, formulaBar);
-  }
 
-  setEditing(null);
-}
-
-// place inside the component where commitEdit and selectedRef are in scope
-function insertCurrentDateTime(includeTime: boolean) {
-  const sel = selectedRef.current;
-  if (!sel) {
-    alert("Please select a cell first.");
-    return;
-  }
-
-  const now = new Date();
-  if (includeTime) {
-    // keep format simple: YYYY-MM-DD HH:MM
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    commitEdit(sel, value);
-  } else {
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-    commitEdit(sel, value);
+    setEditing(null);
+  } catch (err) {
+    console.error("handleFormulaApply failed:", err);
+    alert("Something went wrong while applying the formula.");
   }
 }
+
 
 
 
@@ -1380,17 +1373,28 @@ useEffect(() => {
 
       >
         {editing === id ? (
-          <input
-            autoFocus
-            style={{ width: "100%", height: "100%", border: "none", outline: "none", fontSize: 13, textAlign }}
-            value={formulaBar}
-            onChange={(e) => setFormulaBar(e.target.value)}
-            onBlur={() => commitEdit(id, formulaBar)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") commitEdit(id, formulaBar);
-              else if (e.key === "Escape") { setEditing(null); setFormulaBar(""); }
-            }}
-          />
+<input
+  type="text"
+  value={formulaBar}
+  onChange={(e) => setFormulaBar(e.target.value)}
+  onKeyDown={(e) => {
+    if (e.key === "Enter") {
+      e.preventDefault(); // ✅ prevent accidental form submission
+      handleFormulaApply();
+    }
+  }}
+  placeholder="Type a formula (e.g., =SUM(A1:B2))"
+  style={{
+    flex: 1,
+    border: "none",
+    background: "transparent",
+    outline: "none",
+    color: theme === "dark" ? "#e5e7eb" : "#0f172a",
+    fontSize: 15,
+    fontFamily: "monospace",
+  }}
+/>
+
         ) : (
           <span>{displayText as any}</span>
         )}
