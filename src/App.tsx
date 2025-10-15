@@ -60,6 +60,52 @@ function makeNewMeta(name = "Sheet", rows = 200, cols = 50, suf = "guest"): Shee
   const id = makeId();
   return { id, name, rows, cols, storageKey: `excel-clone:sheet:${suf}:${id}` };
 }
+// --- CSV + Clear Helpers ---
+function cellsToCSV(cells: Record<string, any>, rows: number, cols: number) {
+  const rowsArr: string[][] = [];
+  for (let r = 0; r < rows; r++) {
+    const row: string[] = [];
+    for (let c = 0; c < cols; c++) {
+      const id = `${String.fromCharCode(65 + c)}${r + 1}`;
+      const cell = cells[id];
+      const value = cell?.raw ?? cell?.value ?? "";
+      const safe =
+        typeof value === "string" ? `"${value.replace(/"/g, '""')}"` : value;
+      row.push(String(safe));
+    }
+    rowsArr.push(row);
+  }
+  return rowsArr.map((r) => r.join(",")).join("\n");
+}
+
+function downloadCSV(filename: string, content: string) {
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+function importCSV(text: string, setCells: any) {
+  const lines = text.split("\n").map((l) => l.split(","));
+  const newCells: Record<string, any> = {};
+  for (let r = 0; r < lines.length; r++) {
+    for (let c = 0; c < lines[r].length; c++) {
+      const id = `${String.fromCharCode(65 + c)}${r + 1}`;
+      const val = lines[r][c].replace(/^"|"$/g, "");
+      if (val.trim() !== "") newCells[id] = { value: val, raw: val };
+    }
+  }
+  setCells((prev: any) => ({ ...prev, ...newCells }));
+}
+
+function clearSheet(setCells: any) {
+  if (!confirm("Are you sure you want to clear all data?")) return;
+  setCells({});
+}
 
 // ensure workbook exists for a given user (client-only)
 function ensureWorkbookFor(user: { email?: string; name?: string } | null) {
