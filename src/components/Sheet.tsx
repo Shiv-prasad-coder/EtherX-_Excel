@@ -406,7 +406,45 @@ function computePivotMatrix(
     const p = parseId(id); if (p) setRange({ r1: p.row, c1: p.col, r2: p.row, c2: p.col });
   }, [cells]);
 
- // ✅ Helper: insert current date or date+time into the selected cell
+  const onEdit = useCallback((id: string) => {
+    selectedRef.current = id;
+    setEditing(id);
+    setFormulaBar(cells[id]?.raw ?? (cells[id]?.value?.toString() ?? ""));
+  }, [cells]);
+const commitEdit = useCallback((id: string, raw: string) => {
+  pushHistory();
+
+  setCells(prev => {
+    const copy = { ...prev };
+
+    // Ensure cell object
+    if (!copy[id]) copy[id] = {};
+
+    // Always store exactly what the user typed
+    copy[id].raw = raw;
+
+    // If it's a formula, let the formula engine compute value
+    if (raw.startsWith("=")) {
+      copy[id].value = "";
+      evaluateAndUpdate(copy, id);
+      return copy;
+    }
+
+    // Otherwise, store a number if it parses cleanly; else store as text
+    const n = Number(raw);
+    if (!Number.isNaN(n) && raw.trim() !== "") {
+      // IMPORTANT: do NOT auto-apply percent/date/currency conversions here.
+      // We keep the data pure. Any formatting happens only at render time.
+      copy[id].value = n;
+    } else {
+      copy[id].value = raw ?? "";
+    }
+
+    return copy;
+  });
+
+  setEditing(null);
+}, []);// place inside the component where commitEdit and selectedRef are in scope
 function insertCurrentDateTime(includeTime: boolean) {
   const sel = selectedRef.current;
   if (!sel) {
@@ -415,15 +453,16 @@ function insertCurrentDateTime(includeTime: boolean) {
   }
 
   const now = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-
-  const formatted = includeTime
-    ? `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(
-        now.getHours()
-      )}:${pad(now.getMinutes())}`
-    : `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-
-  commitEdit(sel, formatted);
+  if (includeTime) {
+    // keep format simple: YYYY-MM-DD HH:MM
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    commitEdit(sel, value);
+  } else {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    commitEdit(sel, value);
+  }
 }
 
 
