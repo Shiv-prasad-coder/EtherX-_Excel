@@ -1537,10 +1537,11 @@ const currentFmt =
 
        {/* C) Freeze + Insert/Delete + Conditional Format */}
 {/* C) Freeze + Insert/Delete + Conditional Format */}
+{/* C) Freeze + Insert/Delete + Conditional Format */}
 <div className="flex items-center gap-2">
   {/* Freeze Top Row */}
   <button
-    className={`toolbar-btn transition-all duration-200 ${
+    className={`toolbar-btn transition-all duration-200 active:scale-95 ${
       freezeTopRow
         ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
         : "hover:bg-emerald-50 dark:hover:bg-emerald-800/30"
@@ -1556,7 +1557,7 @@ const currentFmt =
 
   {/* Freeze First Column */}
   <button
-    className={`toolbar-btn transition-all duration-200 ${
+    className={`toolbar-btn transition-all duration-200 active:scale-95 ${
       freezeFirstCol
         ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
         : "hover:bg-emerald-50 dark:hover:bg-emerald-800/30"
@@ -1572,7 +1573,7 @@ const currentFmt =
 
   {/* Conditional Format */}
   <button
-    className="toolbar-btn hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-200"
+    className="toolbar-btn hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-200 active:scale-95"
     style={{ border: `1px solid ${pal.border}` }}
     onClick={() => setShowCondModal(true)}
   >
@@ -1581,8 +1582,13 @@ const currentFmt =
 
   {/* + Row */}
   <button
-    className="toolbar-btn hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-all duration-200"
-    style={{ border: `1px solid ${pal.border}` }}
+    className="toolbar-btn transition-transform duration-150 hover:scale-105 active:scale-95"
+    style={{
+      border: `1px solid ${pal.border}`,
+      background: "rgba(16, 185, 129, 0.15)", // green tint
+      color: "#10b981",
+      fontWeight: 600,
+    }}
     title="+ Row"
     onClick={() => {
       const p = anchorRC();
@@ -1595,10 +1601,10 @@ const currentFmt =
 
   {/* − Row */}
   <button
-    className="toolbar-btn transition-all duration-200 hover:scale-105"
+    className="toolbar-btn transition-transform duration-150 hover:scale-105 active:scale-95"
     style={{
       border: `1px solid ${pal.border}`,
-      background: "rgba(239, 68, 68, 0.15)", // red-500 transparent
+      background: "rgba(239, 68, 68, 0.15)", // red tint
       color: "#ef4444",
       fontWeight: 600,
     }}
@@ -1614,8 +1620,13 @@ const currentFmt =
 
   {/* + Col */}
   <button
-    className="toolbar-btn hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-all duration-200"
-    style={{ border: `1px solid ${pal.border}` }}
+    className="toolbar-btn transition-transform duration-150 hover:scale-105 active:scale-95"
+    style={{
+      border: `1px solid ${pal.border}`,
+      background: "rgba(16, 185, 129, 0.15)",
+      color: "#10b981",
+      fontWeight: 600,
+    }}
     title="+ Col"
     onClick={() => {
       const p = anchorRC();
@@ -1628,10 +1639,10 @@ const currentFmt =
 
   {/* − Col */}
   <button
-    className="toolbar-btn transition-all duration-200 hover:scale-105"
+    className="toolbar-btn transition-transform duration-150 hover:scale-105 active:scale-95"
     style={{
       border: `1px solid ${pal.border}`,
-      background: "rgba(239, 68, 68, 0.15)", // red tint
+      background: "rgba(239, 68, 68, 0.15)",
       color: "#ef4444",
       fontWeight: 600,
     }}
@@ -1645,6 +1656,7 @@ const currentFmt =
     − Col
   </button>
 </div>
+
 
 
         <span className="toolbar-sep" />
@@ -2187,7 +2199,7 @@ color: pal.text,
     </div>
   </div>
 )}
-// ---------- end pivot block ----------
+
 
       </div>
     </div>
