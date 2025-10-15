@@ -1530,14 +1530,10 @@ const currentFmt =
       fontSize: 15,
       fontFamily: "monospace",
     }}
-    onKeyDown={(e) => {
-      if (e.key === "Enter") {
-        if (typeof handleFormulaApply === "function") {
-          handleFormulaApply();
-        }
-        e.currentTarget.blur();
-      }
-    }}
+   onKeyDown={(e) => {
+  if (e.key === "Enter") e.currentTarget.blur();
+}}
+
   />
 </motion.div>
 
