@@ -490,24 +490,18 @@ export default function App() {
   Delete
 </button>
 
-{/* Import CSV */}
+{/* CSV and Clear options */}
 <button
-  className="toolbar-btn transition-transform duration-150 hover:scale-105 active:scale-95"
-  style={{
-    background: "rgba(59, 130, 246, 0.1)",
-    color: "#3b82f6",
-    fontWeight: 600,
-  }}
+  className="toolbar-btn"
   onClick={() => {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = ".csv,text/csv";
     input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      const text = await file.text();
-      if (window.importCSV) window.importCSV(text);
-      else alert("Import function not found");
+      const f = input.files?.[0];
+      if (!f) return;
+      const text = await f.text();
+      importCSV(text, setCells);
     };
     input.click();
   }}
@@ -515,47 +509,23 @@ export default function App() {
   Import CSV
 </button>
 
-{/* Download CSV */}
 <button
-  className="toolbar-btn transition-transform duration-150 hover:scale-105 active:scale-95"
-  style={{
-    background: "rgba(59, 130, 246, 0.1)",
-    color: "#3b82f6",
-    fontWeight: 600,
-  }}
+  className="toolbar-btn"
   onClick={() => {
-    if (window.cellsToCSV) {
-      const csv = window.cellsToCSV();
-      const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = `sheet-${ts}.csv`;
-      link.click();
-    } else alert("Download function not found");
+    const csv = cellsToCSV(cells, activeSheet.rows, activeSheet.cols);
+    const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    downloadCSV(`sheet-${ts}.csv`, csv);
   }}
 >
   Download CSV
 </button>
 
-{/* Clear Sheet */}
 <button
-  className="toolbar-btn transition-transform duration-150 hover:scale-105 active:scale-95"
-  style={{
-    background: "rgba(245, 158, 11, 0.1)",
-    color: "#f59e0b",
-    fontWeight: 600,
-  }}
-  onClick={() => {
-    if (confirm("Clear all cells in this sheet?")) {
-      if (window.clearSheet) window.clearSheet();
-      else alert("Clear function not found");
-    }
-  }}
+  className="toolbar-btn toolbar-btn--danger"
+  onClick={() => clearSheet(setCells)}
 >
   Clear Sheet
 </button>
-
 
 <div style={{ flex: 1 }} />
 
