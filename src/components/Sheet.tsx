@@ -111,8 +111,6 @@ const pal = useMemo(() => getPalette(theme), [theme]);
   const effectiveKey = storageKey;
 
   /** Core data state */
-  const [formulaBar, setFormulaBar] = useState("");
-
   const [cells, setCells] = useState<Record<string, CellValue>>({});
   const [editing, setEditing] = useState<string | null>(null);
   const [formulaBar, setFormulaBar] = useState("");
@@ -431,29 +429,41 @@ const commitEdit = useCallback((id: string, raw: string) => {
       evaluateAndUpdate(copy, id);
       return copy;
     }
-    function handleFormulaApply() {
+   // Apply formula from the formula bar when Enter is pressed
+function handleFormulaApply() {
   if (!formulaBar.trim()) return;
-  const cell = selectedRef.current; // ✅ the currently active cell
-  if (!cell) return;
 
-  const { row, col } = cell;
+  const cellId = selectedRef.current;
+  if (!cellId) {
+    alert("Select a cell first");
+    return;
+  }
 
-  // If it starts with '=', treat it as a formula
+  pushHistory(); // supports undo/redo
+
+  // If it's a formula (starts with =)
   if (formulaBar.trim().startsWith("=")) {
-    const formula = formulaBar.trim().slice(1);
-
     try {
-      // You may already have a function that evaluates formulas
-      const result = evaluateFormula(formula); // ⚙️ replace with your own if needed
-      setCellValue(row, col, result, formulaBar); // ✅ store both raw + formula
+      setCells(prev => {
+        const next = { ...prev };
+        // Store formula and compute value
+        setCellRaw(next, cellId, formulaBar.trim());
+        evaluateAndUpdate(next, cellId);
+        return next;
+      });
     } catch (err) {
       console.error("Formula error:", err);
       alert("Invalid formula!");
     }
   } else {
-    // plain value
-    setCellValue(row, col, formulaBar, undefined);
+    // If it's a normal value, use commitEdit
+    commitEdit(cellId, formulaBar);
   }
+
+  // Exit edit mode
+  setEditing(null);
+}
+
 
   // Refresh UI and clear focus
   setFormulaBar("");
