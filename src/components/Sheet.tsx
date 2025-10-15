@@ -1483,9 +1483,10 @@ const currentFmt =
           {`${sheetName}${selectedRef.current ? ` • ${selectedRef.current}` : ""}`}
         </span>
 
-      <motion.div
+<motion.div
   initial={{ scale: 1, opacity: 0.9 }}
-  whileFocusWithin={{ scale: 1.02, opacity: 1 }}
+  whileHover={{ scale: 1.02, opacity: 1 }}
+  whileFocus={{ scale: 1.02, opacity: 1 }}
   transition={{ type: "spring", stiffness: 200, damping: 20 }}
   style={{
     display: "flex",
@@ -1517,8 +1518,8 @@ const currentFmt =
 
   <input
     type="text"
-    value={formula}
-    onChange={(e) => setFormula(e.target.value)}
+    value={formulaBar}
+    onChange={(e) => setFormulaBar(e.target.value)}
     placeholder="Type a formula (e.g., =SUM(A1:B2))"
     style={{
       flex: 1,
@@ -1528,23 +1529,12 @@ const currentFmt =
       color: theme === "dark" ? "#e5e7eb" : "#0f172a",
       fontSize: 15,
       fontFamily: "monospace",
-      transition: "color 0.2s ease",
-    }}
-    onFocus={(e) => {
-      e.currentTarget.parentElement!.style.boxShadow =
-        theme === "dark"
-          ? "0 0 6px rgba(59,130,246,0.4)"
-          : "0 0 6px rgba(59,130,246,0.3)";
-    }}
-    onBlur={(e) => {
-      e.currentTarget.parentElement!.style.boxShadow =
-        theme === "dark"
-          ? "0 0 8px rgba(255,255,255,0.05)"
-          : "0 0 6px rgba(0,0,0,0.05)";
     }}
     onKeyDown={(e) => {
       if (e.key === "Enter") {
-        applyFormula(); // ✅ optional helper
+        if (typeof handleFormulaApply === "function") {
+          handleFormulaApply();
+        }
         e.currentTarget.blur();
       }
     }}
