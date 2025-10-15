@@ -480,6 +480,25 @@ function handleFormulaApply() {
   }
 }
 
+// ✅ Helper: insert current date or date+time into the selected cell
+function insertCurrentDateTime(includeTime: boolean) {
+  const sel = selectedRef.current;
+  if (!sel) {
+    alert("Please select a cell first.");
+    return;
+  }
+
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  const formatted = includeTime
+    ? `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(
+        now.getHours()
+      )}:${pad(now.getMinutes())}`
+    : `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+
+  commitEdit(sel, formatted);
+}
 
 
 
