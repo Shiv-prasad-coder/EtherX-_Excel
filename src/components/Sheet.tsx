@@ -1364,32 +1364,37 @@ useEffect(() => {
 }}
 
       >
-        {editing === id ? (
-<input
-  type="text"
-  value={formulaBar}
-  onChange={(e) => setFormulaBar(e.target.value)}
-  onKeyDown={(e) => {
-    if (e.key === "Enter") {
-      e.preventDefault(); // ✅ prevent accidental form submission
-      handleFormulaApply();
-    }
-  }}
-  placeholder="Type a formula (e.g., =SUM(A1:B2))"
-  style={{
-    flex: 1,
-    border: "none",
-    background: "transparent",
-    outline: "none",
-    color: theme === "dark" ? "#e5e7eb" : "#0f172a",
-    fontSize: 15,
-    fontFamily: "monospace",
-  }}
-/>
+ {editing === id ? (
+  <input
+    type="text"
+    autoFocus
+    defaultValue={formulaBar}
+    onChange={(e) => setFormulaBar(e.target.value)}
+    onKeyDown={(e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        commitEdit(id, e.currentTarget.value); // ✅ directly commit what’s typed
+        setEditing(null);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        setEditing(null);
+        setFormulaBar(cells[id]?.raw ?? (cells[id]?.value?.toString() ?? ""));
+      }
+    }}
+    style={{
+      flex: 1,
+      border: "none",
+      background: "transparent",
+      outline: "none",
+      color: theme === "dark" ? "#e5e7eb" : "#0f172a",
+      fontSize: 15,
+      fontFamily: "monospace",
+    }}
+  />
+) : (
+  <span>{displayText as any}</span>
+)}
 
-        ) : (
-          <span>{displayText as any}</span>
-        )}
 
         {/* Fill handle */}
         {isSelected && editing !== id && (
