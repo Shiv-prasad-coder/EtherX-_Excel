@@ -1,19 +1,9 @@
 // src/App.tsx
 import { useEffect, useState } from "react";
-
 import Sheet from "./components/Sheet";
 import AuthPage from "./components/AuthPage";
 import Dashboard from "./components/Dashboard";
 import SplashScreen from "./components/SplashScreen";
-// Extend the Window interface so TypeScript recognizes our global helpers
-declare global {
-  interface Window {
-    importCSV?: (csvText: string) => void;
-    cellsToCSV?: () => string;
-    clearSheet?: () => void;
-  }
-}
-
 
 type SheetMeta = {
   id: string;
@@ -28,7 +18,6 @@ type CellData = {
   bold?: boolean;
   formula?: string;
 };
-
 type TemplateDef = {
   name: string;
   rows?: number;
@@ -36,7 +25,6 @@ type TemplateDef = {
   cells: Record<string, CellData>;
 };
 
-// stable keys (per-user workbook key is computed)
 const THEME_KEY = "excel-clone:theme";
 const USER_KEY = "excel-clone:user";
 
@@ -46,8 +34,6 @@ type View = "dashboard" | "sheet";
 function makeId() {
   return `${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 }
-
-// produce a short safe suffix from user (email or name)
 function userSuffix(u: { email?: string; name?: string } | null) {
   if (!u) return "guest";
   const id = (u.email || u.name || "user").toLowerCase();
@@ -60,54 +46,6 @@ function makeNewMeta(name = "Sheet", rows = 200, cols = 50, suf = "guest"): Shee
   const id = makeId();
   return { id, name, rows, cols, storageKey: `excel-clone:sheet:${suf}:${id}` };
 }
-// --- CSV + Clear Helpers ---
-function cellsToCSV(cells: Record<string, any>, rows: number, cols: number) {
-  const rowsArr: string[][] = [];
-  for (let r = 0; r < rows; r++) {
-    const row: string[] = [];
-    for (let c = 0; c < cols; c++) {
-      const id = `${String.fromCharCode(65 + c)}${r + 1}`;
-      const cell = cells[id];
-      const value = cell?.raw ?? cell?.value ?? "";
-      const safe =
-        typeof value === "string" ? `"${value.replace(/"/g, '""')}"` : value;
-      row.push(String(safe));
-    }
-    rowsArr.push(row);
-  }
-  return rowsArr.map((r) => r.join(",")).join("\n");
-}
-
-function downloadCSV(filename: string, content: string) {
-  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
-  const link = document.createElement("a");
-  const url = URL.createObjectURL(blob);
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-}
-
-function importCSV(text: string, setCells: any) {
-  const lines = text.split("\n").map((l) => l.split(","));
-  const newCells: Record<string, any> = {};
-  for (let r = 0; r < lines.length; r++) {
-    for (let c = 0; c < lines[r].length; c++) {
-      const id = `${String.fromCharCode(65 + c)}${r + 1}`;
-      const val = lines[r][c].replace(/^"|"$/g, "");
-      if (val.trim() !== "") newCells[id] = { value: val, raw: val };
-    }
-  }
-  setCells((prev: any) => ({ ...prev, ...newCells }));
-}
-
-function clearSheet(setCells: any) {
-  if (!confirm("Are you sure you want to clear all data?")) return;
-  setCells({});
-}
-
-// ensure workbook exists for a given user (client-only)
 function ensureWorkbookFor(user: { email?: string; name?: string } | null) {
   const key = workbookKeyFor(user);
   try {
@@ -115,12 +53,10 @@ function ensureWorkbookFor(user: { email?: string; name?: string } | null) {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // ensure storageKey format contains suffix — fix older entries
         const suf = userSuffix(user);
         const fixed = parsed.map((m: SheetMeta) => {
           const expected = `excel-clone:sheet:${suf}:${m.id}`;
           if (!m.storageKey || !m.storageKey.includes(`:sheet:${suf}:`)) {
-            // migrate payload if present under old key
             try {
               const oldPayload = localStorage.getItem(m.storageKey || "");
               if (oldPayload) localStorage.setItem(expected, oldPayload);
@@ -136,193 +72,92 @@ function ensureWorkbookFor(user: { email?: string; name?: string } | null) {
         return fixed as SheetMeta[];
       }
     }
-  } catch (e) {
-    // ignore parse errors
-  }
-  // create default workbook for this user
+  } catch {}
   const suf = userSuffix(user);
   const def = [makeNewMeta("Sheet1", 200, 50, suf)];
   localStorage.setItem(key, JSON.stringify(def));
   try {
     const payloadKey = def[0].storageKey;
-    if (!localStorage.getItem(payloadKey)) localStorage.setItem(payloadKey, JSON.stringify({ cells: {} }));
+    if (!localStorage.getItem(payloadKey))
+      localStorage.setItem(payloadKey, JSON.stringify({ cells: {} }));
   } catch {}
   return def;
 }
 
 export default function App() {
-  // Theme: default to light; will load from storage on mount
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const toggleTheme = () => {
     const next = theme === "light" ? "dark" : "light";
     setTheme(next);
-    try {
-      localStorage.setItem(THEME_KEY, next);
-    } catch {}
+    localStorage.setItem(THEME_KEY, next);
   };
 
-  // Workbook + auth state (start empty; load on mount)
   const [sheets, setSheets] = useState<SheetMeta[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [user, setUser] = useState<User | null>(null);
   const [view, setView] = useState<View>("dashboard");
 
-  // Splash
   const [showSplash, setShowSplash] = useState(true);
   useEffect(() => {
     const t = setTimeout(() => setShowSplash(false), 2500);
     return () => clearTimeout(t);
   }, []);
 
-  // On client mount, load user/theme/workbook
+  // For CSV + Clear function bridges
+  const [importCSVFn, setImportCSVFn] = useState<(fileText: string) => void>();
+  const [downloadCSVFn, setDownloadCSVFn] = useState<() => string>();
+  const [clearSheetFn, setClearSheetFn] = useState<() => void>();
+
   useEffect(() => {
     if (typeof window === "undefined") return;
+    const t = localStorage.getItem(THEME_KEY) as "light" | "dark" | null;
+    if (t) setTheme(t);
 
-    // load theme
-    try {
-      const t = localStorage.getItem(THEME_KEY) as "light" | "dark" | null;
-      if (t === "light" || t === "dark") setTheme(t);
-    } catch {}
-
-    // load user (if any)
     let loadedUser: User | null = null;
     try {
       const raw = localStorage.getItem(USER_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as User;
-        loadedUser = { ...parsed, email: parsed.email ? parsed.email.toLowerCase() : parsed.email };
-      }
+      if (raw) loadedUser = JSON.parse(raw);
     } catch {}
-
     setUser(loadedUser);
 
-    // ensure workbook for loadedUser (namespaced)
-    try {
-      const meta = ensureWorkbookFor(loadedUser);
-      setSheets(meta);
-      setActiveIndex(0);
-    } catch (err) {
-      // fallback
-      const suf = userSuffix(loadedUser);
-      const def = [makeNewMeta("Sheet1", 200, 50, suf)];
-      setSheets(def);
-      setActiveIndex(0);
-    }
+    const meta = ensureWorkbookFor(loadedUser);
+    setSheets(meta);
+    setActiveIndex(0);
   }, []);
 
-  // persist workbook meta when sheets change or when user changes (user-specific key)
   useEffect(() => {
-    try {
-      const key = workbookKeyFor(user);
-      localStorage.setItem(key, JSON.stringify(sheets));
-    } catch {}
+    localStorage.setItem(workbookKeyFor(user), JSON.stringify(sheets));
   }, [sheets, user]);
 
-  // persist user (normalized) whenever it changes
   useEffect(() => {
-    try {
-      if (user) {
-        const normalized = { ...user, email: user.email ? user.email.toLowerCase() : user.email };
-        localStorage.setItem(USER_KEY, JSON.stringify(normalized));
-      } else {
-        localStorage.removeItem(USER_KEY);
-      }
-    } catch {}
+    if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
+    else localStorage.removeItem(USER_KEY);
   }, [user]);
 
-  // sheet helpers that must be user-aware
-  const createFromTemplate = (tmpl: TemplateDef) => {
-    const rows = tmpl.rows ?? 200;
-    const cols = tmpl.cols ?? 50;
-    const suf = userSuffix(user);
-    const meta = makeNewMeta(tmpl.name, rows, cols, suf);
-
-    setSheets((prev) => {
-      const next = [...prev, meta];
-      try {
-        localStorage.setItem(workbookKeyFor(user), JSON.stringify(next));
-      } catch {}
-      const payload = { cells: tmpl.cells, rowCount: rows, colCount: cols };
-      try {
-        localStorage.setItem(meta.storageKey, JSON.stringify(payload));
-      } catch {}
-      setActiveIndex(next.length - 1);
-      return next;
-    });
-
-    setView("sheet");
-  };
-
-  // Auth handlers (called from AuthPage)
   function handleAuthed(u: User) {
-    const normalized: User = { ...u, email: u.email ? u.email.toLowerCase() : u.email };
-    setUser(normalized);
-    try {
-      localStorage.setItem(USER_KEY, JSON.stringify(normalized));
-    } catch {}
-    // if user had no workbook but guest does, migrate guest -> user (one-time)
-    try {
-      const userKey = workbookKeyFor(normalized);
-      const guestKey = workbookKeyFor(null);
-      const userBlob = localStorage.getItem(userKey);
-      const guestBlob = localStorage.getItem(guestKey);
-      if ((!userBlob || userBlob === "[]") && guestBlob) {
-        const parsed = JSON.parse(guestBlob);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const suf = userSuffix(normalized);
-          const migrated = parsed.map((m: SheetMeta) => {
-            const newKey = `excel-clone:sheet:${suf}:${m.id}`;
-            // copy payload if exists under old key
-            const oldPayload = localStorage.getItem(m.storageKey);
-            if (oldPayload && !localStorage.getItem(newKey)) localStorage.setItem(newKey, oldPayload);
-            else if (!localStorage.getItem(newKey)) localStorage.setItem(newKey, JSON.stringify({ cells: {} }));
-            return { ...m, storageKey: newKey };
-          });
-          localStorage.setItem(userKey, JSON.stringify(migrated));
-          setSheets(migrated);
-          setActiveIndex(0);
-          console.info("[migration] guest workbook copied to user:", userKey);
-        }
-      } else {
-        // ensure we load user's workbook
-        const meta = ensureWorkbookFor(normalized);
-        setSheets(meta);
-        setActiveIndex(0);
-      }
-    } catch (err) {
-      // fallback to ensure
-      const meta = ensureWorkbookFor(normalized);
-      setSheets(meta);
-      setActiveIndex(0);
-    }
-
+    setUser(u);
+    localStorage.setItem(USER_KEY, JSON.stringify(u));
+    const meta = ensureWorkbookFor(u);
+    setSheets(meta);
+    setActiveIndex(0);
     setView("dashboard");
   }
+
   function handleLogout() {
     setUser(null);
-    // keep user data in storage; just switch state to logged out (guest)
-    // load guest workbook
-    try {
-      const guestMeta = ensureWorkbookFor(null);
-      setSheets(guestMeta);
-      setActiveIndex(0);
-    } catch (e) {
-      setSheets([makeNewMeta("Sheet1", 200, 50, "guest")]);
-      setActiveIndex(0);
-    }
+    const meta = ensureWorkbookFor(null);
+    setSheets(meta);
+    setActiveIndex(0);
     setView("dashboard");
   }
 
-  // Sheet actions (user-aware)
   const addSheet = () => {
     const suf = userSuffix(user);
     const meta = makeNewMeta(`Sheet${sheets.length + 1}`, 200, 50, suf);
     setSheets((prev) => {
       const next = [...prev, meta];
-      try {
-        localStorage.setItem(workbookKeyFor(user), JSON.stringify(next));
-        localStorage.setItem(meta.storageKey, JSON.stringify({ cells: {} }));
-      } catch {}
+      localStorage.setItem(workbookKeyFor(user), JSON.stringify(next));
+      localStorage.setItem(meta.storageKey, JSON.stringify({ cells: {} }));
       return next;
     });
     setActiveIndex(sheets.length);
@@ -330,9 +165,7 @@ export default function App() {
   const deleteSheet = (index: number) => {
     if (sheets.length === 1) return alert("Cannot delete the only sheet.");
     if (!confirm(`Delete "${sheets[index].name}"?`)) return;
-    try {
-      localStorage.removeItem(sheets[index].storageKey);
-    } catch {}
+    localStorage.removeItem(sheets[index].storageKey);
     const next = sheets.filter((_, i) => i !== index);
     setSheets(next);
     setActiveIndex(Math.max(0, index - 1));
@@ -347,17 +180,14 @@ export default function App() {
     const copy = makeNewMeta(`${src.name}-copy`, src.rows, src.cols, userSuffix(user));
     setSheets((prev) => {
       const next = [...prev, copy];
-      try {
-        const blob = localStorage.getItem(src.storageKey);
-        if (blob) localStorage.setItem(copy.storageKey, blob);
-        localStorage.setItem(workbookKeyFor(user), JSON.stringify(next));
-      } catch {}
+      const blob = localStorage.getItem(src.storageKey);
+      if (blob) localStorage.setItem(copy.storageKey, blob);
+      localStorage.setItem(workbookKeyFor(user), JSON.stringify(next));
       return next;
     });
     setActiveIndex(sheets.length);
   };
 
-  // UI: Fade / splash
   const Fade: React.FC<{ show: boolean; children: React.ReactNode }> = ({ show, children }) => (
     <div
       style={{
@@ -372,7 +202,6 @@ export default function App() {
     </div>
   );
 
-  // show splash
   if (showSplash)
     return (
       <Fade show={showSplash}>
@@ -380,19 +209,13 @@ export default function App() {
       </Fade>
     );
 
-  // Not logged in -> show AuthPage
   if (!user)
     return (
       <Fade show={!showSplash}>
-       <AuthPage
-  theme={theme}
-  onAuth={handleAuthed}
-/>
-
+        <AuthPage theme={theme} onAuth={handleAuthed} />
       </Fade>
     );
 
-  // Dashboard
   if (view === "dashboard")
     return (
       <Fade show={!showSplash}>
@@ -408,14 +231,12 @@ export default function App() {
             addSheet();
             setView("sheet");
           }}
-          onCreateFromTemplate={createFromTemplate}
           onLogout={handleLogout}
           onToggleTheme={toggleTheme}
         />
       </Fade>
     );
 
-  // Sheet view
   const activeSheet = sheets[activeIndex];
   return (
     <Fade show={!showSplash}>
@@ -439,9 +260,10 @@ export default function App() {
             background: theme === "dark" ? "#0b1220" : "#ffffff",
           }}
         >
-<button onClick={() => setView("dashboard")} className="toolbar-btn toolbar-btn--primary">
-  ⬅ Dashboard
-</button>
+          <button onClick={() => setView("dashboard")} className="toolbar-btn toolbar-btn--primary">
+            ⬅ Dashboard
+          </button>
+
           <select
             value={activeIndex}
             onChange={(e) => setActiveIndex(Number(e.target.value))}
@@ -459,80 +281,73 @@ export default function App() {
               </option>
             ))}
           </select>
-         {/* Sheet Actions */}
-<button onClick={addSheet} className="toolbar-btn transition-transform duration-150 hover:scale-105 active:scale-95">
-  + Sheet
-</button>
 
-<button onClick={() => duplicateSheet(activeIndex)} className="toolbar-btn transition-transform duration-150 hover:scale-105 active:scale-95">
-  Duplicate
-</button>
+          {/* Sheet actions */}
+          <button onClick={addSheet} className="toolbar-btn">+ Sheet</button>
+          <button onClick={() => duplicateSheet(activeIndex)} className="toolbar-btn">Duplicate</button>
+          <button onClick={() => renameSheet(activeIndex)} className="toolbar-btn">Rename</button>
+          <button
+            onClick={() => deleteSheet(activeIndex)}
+            className="toolbar-btn toolbar-btn--danger"
+            style={{
+              background: "rgba(239,68,68,0.15)",
+              color: "#ef4444",
+              border: "1px solid #ef4444",
+              fontWeight: 600,
+            }}
+          >
+            Delete
+          </button>
 
-{/* Rename */}
-<button
-  onClick={() => renameSheet(activeIndex)}
-  className="toolbar-btn transition-transform duration-150 hover:scale-105 active:scale-95"
->
-  Rename
-</button>
+          {/* CSV + Clear buttons */}
+          <button
+            className="toolbar-btn"
+            onClick={() => {
+              const input = document.createElement("input");
+              input.type = "file";
+              input.accept = ".csv,text/csv";
+              input.onchange = async () => {
+                const f = input.files?.[0];
+                if (!f || !importCSVFn) return;
+                const text = await f.text();
+                importCSVFn(text);
+              };
+              input.click();
+            }}
+          >
+            Import CSV
+          </button>
 
-{/* Delete */}
-<button
-  onClick={() => deleteSheet(activeIndex)}
-  className="toolbar-btn transition-transform duration-150 hover:scale-105 active:scale-95"
-  style={{
-    background: "rgba(239, 68, 68, 0.15)",
-    color: "#ef4444",
-    border: "1px solid #ef4444",
-    fontWeight: 600,
-  }}
->
-  Delete
-</button>
+          <button
+            className="toolbar-btn"
+            onClick={() => {
+              if (!downloadCSVFn) return;
+              const csv = downloadCSVFn();
+              const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+              const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+              const link = document.createElement("a");
+              link.href = URL.createObjectURL(blob);
+              link.download = `sheet-${ts}.csv`;
+              link.click();
+            }}
+          >
+            Download CSV
+          </button>
 
-{/* CSV and Clear options */}
-<button
-  className="toolbar-btn"
-  onClick={() => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".csv,text/csv";
-    input.onchange = async () => {
-      const f = input.files?.[0];
-      if (!f) return;
-      const text = await f.text();
-      importCSV(text, setCells);
-    };
-    input.click();
-  }}
->
-  Import CSV
-</button>
+          <button
+            className="toolbar-btn toolbar-btn--danger"
+            onClick={() => clearSheetFn?.()}
+          >
+            Clear Sheet
+          </button>
 
-<button
-  className="toolbar-btn"
-  onClick={() => {
-    const csv = cellsToCSV(cells, activeSheet.rows, activeSheet.cols);
-    const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-    downloadCSV(`sheet-${ts}.csv`, csv);
-  }}
->
-  Download CSV
-</button>
-
-<button
-  className="toolbar-btn toolbar-btn--danger"
-  onClick={() => clearSheet(setCells)}
->
-  Clear Sheet
-</button>
-
-<div style={{ flex: 1 }} />
-
-<button onClick={toggleTheme} className="toolbar-btn">
-  {theme === "dark" ? "🌞 Light" : "🌙 Dark"}
-</button>
-<button onClick={handleLogout} className="toolbar-btn toolbar-btn--danger">Logout</button>
+          <div style={{ flex: 1 }} />
+          <button onClick={toggleTheme} className="toolbar-btn">
+            {theme === "dark" ? "🌞 Light" : "🌙 Dark"}
+          </button>
+          <button onClick={handleLogout} className="toolbar-btn toolbar-btn--danger">
+            Logout
+          </button>
         </div>
 
         {/* Sheet Area */}
@@ -545,6 +360,9 @@ export default function App() {
               storageKey={activeSheet.storageKey}
               sheetName={activeSheet.name}
               theme={theme}
+              onImportCSV={setImportCSVFn}
+              onDownloadCSV={setDownloadCSVFn}
+              onClearSheet={setClearSheetFn}
             />
           ) : (
             <div style={{ padding: 16 }}>No sheet loaded.</div>
@@ -554,5 +372,3 @@ export default function App() {
     </Fade>
   );
 }
-
-
