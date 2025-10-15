@@ -563,49 +563,7 @@ function insertCurrentDateTime(includeTime: boolean) {
     });
   }
 
-  function cellsToCSV(): string {
-    const esc = (s: string) => /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    const lines: string[] = [];
-    for (let r = 0; r < rowCount; r++) {
-      const rowVals: string[] = [];
-      for (let c = 0; c < colCount; c++) {
-        const v = cells[cellId(r, c)]?.value;
-        rowVals.push(esc(v == null ? "" : String(v)));
-      }
-      lines.push(rowVals.join(","));
-    }
-    return lines.join("\r\n");
-  }
-  function downloadCSV(filename: string, csvText: string) {
-    const blob = new Blob([csvText], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-  }
-  function importCSV(text: string) {
-    pushHistory();
-    const data = parseTable(text);
-    const next: Record<string, CellValue> = { ...cells };
-    const maxR = Math.min(rowCount, data.length);
-    for (let r = 0; r < maxR; r++) {
-      const line = data[r] ?? [];
-      const maxC = Math.min(colCount, line.length);
-      for (let c = 0; c < maxC; c++) {
-        setCellRaw(next, cellId(r, c), String(line[c] ?? ""));
-        evaluateAndUpdate(next, cellId(r, c));
-      }
-    }
-    setCells(next);
-    selectedRef.current = "A1";
-    setFormulaBar(next["A1"]?.raw ?? "");
-    setRange({ r1: 0, c1: 0, r2: 0, c2: 0 });
-  }
-  function clearSheet() {
-    if (!confirm("Clear all cells? This cannot be undone.")) return;
-    pushHistory();
-    setCells({});
-    try { localStorage.removeItem(effectiveKey); } catch {}
-  }
+ 
 
   /** Auto-fit + column resize */
   const measureCanvasRef = useRef<HTMLCanvasElement | null>(null);
