@@ -2,7 +2,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { evaluateAndUpdate, setCellRaw } from "../utils/formulaEngine";
 import type { CellValue } from "../utils/formulaEngine";
-import { motion } from "framer-motion";
 
   
 
