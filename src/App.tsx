@@ -451,11 +451,3 @@ function btn(theme: "light" | "dark"): CSSProperties {
     transition: "all 0.25s ease",
   };
 }
-function btnDanger(theme: "light" | "dark"): CSSProperties {
-  const isDark = theme === "dark";
-  return {
-    ...btn(theme),
-    background: isDark ? "#7f1d1d" : "#fee2e2",
-    color: isDark ? "#fee2e2" : "#b91c1c",
-  };
-}
