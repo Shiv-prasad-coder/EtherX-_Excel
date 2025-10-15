@@ -436,18 +436,4 @@ export default function App() {
   );
 }
 
-// Styles
-function btn(theme: "light" | "dark"): CSSProperties {
-  const isDark = theme === "dark";
-  return {
-    height: 34,
-    padding: "0 12px",
-    borderRadius: 8,
-    cursor: "pointer",
-    border: `1px solid ${isDark ? "#475569" : "#d1d5db"}`,
-    background: isDark ? "#1f2937" : "#ffffff",
-    color: isDark ? "#e5e7eb" : "#0f172a",
-    marginRight: 8,
-    transition: "all 0.25s ease",
-  };
-}
+
