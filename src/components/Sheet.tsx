@@ -111,6 +111,8 @@ const pal = useMemo(() => getPalette(theme), [theme]);
   const effectiveKey = storageKey;
 
   /** Core data state */
+  const [formulaBar, setFormulaBar] = useState("");
+
   const [cells, setCells] = useState<Record<string, CellValue>>({});
   const [editing, setEditing] = useState<string | null>(null);
   const [formulaBar, setFormulaBar] = useState("");
@@ -429,6 +431,35 @@ const commitEdit = useCallback((id: string, raw: string) => {
       evaluateAndUpdate(copy, id);
       return copy;
     }
+    function handleFormulaApply() {
+  if (!formulaBar.trim()) return;
+  const cell = selectedRef.current; // ✅ the currently active cell
+  if (!cell) return;
+
+  const { row, col } = cell;
+
+  // If it starts with '=', treat it as a formula
+  if (formulaBar.trim().startsWith("=")) {
+    const formula = formulaBar.trim().slice(1);
+
+    try {
+      // You may already have a function that evaluates formulas
+      const result = evaluateFormula(formula); // ⚙️ replace with your own if needed
+      setCellValue(row, col, result, formulaBar); // ✅ store both raw + formula
+    } catch (err) {
+      console.error("Formula error:", err);
+      alert("Invalid formula!");
+    }
+  } else {
+    // plain value
+    setCellValue(row, col, formulaBar, undefined);
+  }
+
+  // Refresh UI and clear focus
+  setFormulaBar("");
+  blurSelection();
+}
+
 
     // Otherwise, store a number if it parses cleanly; else store as text
     const n = Number(raw);
@@ -1530,14 +1561,14 @@ const currentFmt =
       fontSize: 15,
       fontFamily: "monospace",
     }}
-   onKeyDown={(e) => {
-  if (e.key === "Enter") e.currentTarget.blur();
-}}
-
+    onKeyDown={(e) => {
+      if (e.key === "Enter") {
+        handleFormulaApply();
+        e.currentTarget.blur();
+      }
+    }}
   />
 </motion.div>
-
-      
 
        {/* C) Freeze + Insert/Delete + Conditional Format */}
 {/* C) Freeze + Insert/Delete + Conditional Format */}
