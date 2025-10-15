@@ -727,6 +727,11 @@ useEffect(() => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [effectiveKey]);
 
+useEffect(() => {
+  onImportCSV?.(importCSV);
+  onDownloadCSV?.(() => cellsToCSV());
+  onClearSheet?.(clearSheet);
+}, [onImportCSV, onDownloadCSV, onClearSheet, cells]);
 
   /** Autosave */
   useEffect(() => {
