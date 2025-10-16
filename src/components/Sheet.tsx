@@ -2,6 +2,14 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { evaluateAndUpdate, setCellRaw } from "../utils/formulaEngine";
 import type { CellValue } from "../utils/formulaEngine";
+declare global {
+  interface Window {
+    importCSV?: (csvText: string) => void;
+    cellsToCSV?: () => string;
+    clearSheet?: () => void;
+    setFontSize?: (size: number) => void; // ✅ add this line
+  }
+}
 
   
 
@@ -83,6 +91,10 @@ type CellFmt = {
   numFmt?: NumFmt;
   decimals?: number;
   currency?: string;
+  fontSize?: number;
+    fontFamily?: string;
+     border?: string;   
+
 };
 
 /** Conditional formatting color helper */
@@ -108,56 +120,50 @@ const pal = useMemo(() => getPalette(theme), [theme]);
 
 
   const effectiveKey = storageKey;
+  function ShapeIcon({ type, stroke }: { type: ShapeType; stroke: string }) {
+  const common = { fill: "none", stroke, strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" } as const;
+  return (
+    <svg width="48" height="32" viewBox="0 0 48 32" aria-hidden>
+      {type === "rect" && <rect x="8" y="6" width="32" height="20" {...common} />}
+      {type === "circle" && <circle cx="24" cy="16" r="10" {...common} />}
+      {type === "triangle" && <path d="M24 6 L40 26 H8 Z" {...common} />}
+      {type === "arrow" && <path d="M8 16 H34 M26 10 L34 16 L26 22" {...common} />}
+      {type === "line" && <path d="M8 8 L40 24" {...common} />}
+      {type === "diamond" && <path d="M24 6 L40 16 L24 26 L8 16 Z" {...common} />}
+      {type === "star" && (
+        <path d="M24 6 L27.5 14 H36 L29 18.5 L31.5 26 L24 21.2 L16.5 26 L19 18.5 L12 14 H20.5 Z" {...common} />
+      )}
+      {type === "heart" && (
+        <path d="M16 12c0-3 3-4 5-2c2-2 5-1 5 2c0 4-5 7-5 7s-5-3-5-7Z" {...common} />
+      )}
+      {type === "cloud" && (
+        <path d="M16 20h16a6 6 0 0 0-1.5-11.8A8 8 0 0 0 16 12a5 5 0 0 0 0 8Z" {...common} />
+      )}
+      {type === "textbox" && (
+        <>
+          <rect x="8" y="6" width="32" height="20" {...common} />
+          <path d="M12 12 H36 M12 16 H28" {...common} />
+        </>
+      )}
+    </svg>
+  );
+}
+
 
   /** Core data state */
-  const [cells, setCells] = useState<Record<string, CellValue>>({});
-  // Inside your Sheet component, right after const [cells, setCells] = useState(...)
-function cellsToCSV() {
-  const rowsArr: string[][] = [];
-  for (let r = 0; r < rowCount; r++) {
-    const row: string[] = [];
-    for (let c = 0; c < colCount; c++) {
-      const id = `${String.fromCharCode(65 + c)}${r + 1}`;
-      const cell = cells[id];
-      const value = cell?.raw ?? cell?.value ?? "";
-      const safe =
-        typeof value === "string" ? `"${value.replace(/"/g, '""')}"` : value;
-      row.push(String(safe));
+  const [cells, setCells] = useState<Record<string, CellValue>>(() => {
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return parsed.cells || {};
     }
-    rowsArr.push(row);
+  } catch (err) {
+    console.warn("Failed to load saved sheet:", err);
   }
-  return rowsArr.map((r) => r.join(",")).join("\n");
-}
+  return {};
+});
 
-function downloadCSV(filename: string, content: string) {
-  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
-  const link = document.createElement("a");
-  const url = URL.createObjectURL(blob);
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-}
-
-function importCSV(text: string) {
-  const lines = text.split("\n").map((l) => l.split(","));
-  const newCells: Record<string, any> = {};
-  for (let r = 0; r < lines.length; r++) {
-    for (let c = 0; c < lines[r].length; c++) {
-      const id = `${String.fromCharCode(65 + c)}${r + 1}`;
-      const val = lines[r][c].replace(/^"|"$/g, "");
-      if (val.trim() !== "") newCells[id] = { value: val, raw: val };
-    }
-  }
-  setCells((prev) => ({ ...prev, ...newCells }));
-}
-
-function clearSheet() {
-  if (!confirm("Are you sure you want to clear all data?")) return;
-  setCells({});
-  pushHistory();
-}
 
   const [editing, setEditing] = useState<string | null>(null);
   const [formulaBar, setFormulaBar] = useState("");
@@ -177,10 +183,25 @@ const [rules, setRules] = useState<{ condition: string; value: string; color: st
   /** Freeze toggles */
   const [freezeTopRow, setFreezeTopRow] = useState(false);
   const [freezeFirstCol, setFreezeFirstCol] = useState(false);
+  // Zoom level (1.0 = 100%)
+const [zoom, setZoom] = useState(1);
+const [showZoomModal, setShowZoomModal] = useState(false);
+
 
   /** Conditional formatting toggle */
   const [condEnabled, setCondEnabled] = useState(false);
   const [showCondModal, setShowCondModal] = useState(false);
+  const [showFontModal, setShowFontModal] = useState(false);
+  const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
+
+  // Table insert modal
+const [showTableModal, setShowTableModal] = useState(false);
+const [tableSize, setTableSize] = useState({ rows: 3, cols: 3 });
+
+const [showFormulaModal, setShowFormulaModal] = useState(false);
+
+
+
 // ---------- Pivot table UI / logic (drop into Sheet component) ----------
 const [showPivotModal, setShowPivotModal] = useState(false);
 const [pivotPreview, setPivotPreview] = useState<string[][] | null>(null);
@@ -197,6 +218,52 @@ const [pivotOpts, setPivotOpts] = useState<{
   agg: "sum",
   includeHeaderRow: true,
 });
+// ---------- Shapes Layer ----------
+type SheetShape = {
+  id: string;
+  type: ShapeType;
+  x: number; // pixel position (relative to grid)
+  y: number;
+  width: number;
+  height: number;
+  color: string;
+};
+
+const [shapes, setShapes] = useState<SheetShape[]>([]);
+
+// ---------- Insert Shapes (dialog + selection) ----------
+type ShapeType =
+  | "rect"
+  | "circle"
+  | "triangle"
+  | "arrow"
+  | "line"
+  | "diamond"
+  | "star"
+  | "heart"
+  | "cloud"
+  | "textbox";
+
+// Dialog visibility state
+const [showShapesModal, setShowShapesModal] = useState(false);
+
+// Shape insertion logic (for now it just alerts — you’ll hook it up later)
+const startShapeInsert = (type: ShapeType) => {
+  setShowShapesModal(false);
+  
+  // Create a new shape object (appears near top-left for now)
+  const newShape: SheetShape = {
+    id: `shape_${Date.now()}`,
+    type,
+    x: 120, // starting X position
+    y: 100, // starting Y position
+    width: 100,
+    height: 60,
+    color: "#3b82f6", // blue for now
+  };
+
+  setShapes(prev => [...prev, newShape]);
+};
 
 /** Helper: get textual value from a cell id */
 function cellToText(id: string): string {
@@ -511,6 +578,44 @@ function insertCurrentDateTime(includeTime: boolean) {
     commitEdit(sel, value);
   }
 }
+function insertTable(rows: number, cols: number) {
+  const startId = selectedRef.current;
+  if (!startId) return alert("Select a cell first!");
+
+  pushHistory();
+
+  const pos = parseId(startId);
+  if (!pos) return;
+
+  setCells((prev) => {
+    const next = { ...prev };
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const id = cellId(pos.row + r, pos.col + c);
+        if (!next[id]) next[id] = {};
+        next[id].value = ""; // empty cell
+        next[id].raw = "";
+      }
+    }
+    return next;
+  });
+
+  // give cells a border to visually form a "table"
+  setFormats((prev) => {
+    const next = { ...prev };
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const id = cellId(pos.row + r, pos.col + c);
+        next[id] = {
+          ...(next[id] || {}),
+          border: "1px solid #3b82f6",
+        };
+      }
+    }
+    return next;
+  });
+}
+
 
 
 
@@ -563,7 +668,6 @@ function insertCurrentDateTime(includeTime: boolean) {
     });
   }
 
- 
 
   /** Auto-fit + column resize */
   const measureCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -599,6 +703,79 @@ function insertCurrentDateTime(includeTime: boolean) {
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
   }
+  // ================= CSV / Import / Clear Helpers =================
+
+// Convert all sheet data to CSV string
+function cellsToCSV(): string {
+  const rowsArr: string[] = [];
+  for (let r = 0; r < rowCount; r++) {
+    const rowVals: string[] = [];
+    for (let c = 0; c < colCount; c++) {
+      const id = `${String.fromCharCode(65 + c)}${r + 1}`;
+      const val = cells[id]?.raw ?? cells[id]?.value ?? "";
+      const safe = typeof val === "string"
+        ? `"${val.replace(/"/g, '""')}"`
+        : String(val);
+      rowVals.push(safe);
+    }
+    rowsArr.push(rowVals.join(","));
+  }
+  return rowsArr.join("\n");
+}
+
+// Import CSV text into cells
+function importCSV(csvText: string) {
+  const lines = csvText.split("\n").map(l => l.split(","));
+  const newCells: Record<string, any> = {};
+  for (let r = 0; r < lines.length; r++) {
+    for (let c = 0; c < lines[r].length; c++) {
+      const id = `${String.fromCharCode(65 + c)}${r + 1}`;
+      const val = lines[r][c].replace(/^"|"$/g, "");
+      if (val.trim() !== "") newCells[id] = { value: val, raw: val };
+    }
+  }
+  setCells(prev => ({ ...prev, ...newCells }));
+}
+
+// Clear entire sheet
+function clearSheet() {
+  if (!confirm("Are you sure you want to clear all data?")) return;
+  setCells({});
+}
+
+
+// Expose globally so App toolbar can access
+useEffect(() => {
+  if (typeof setFontSize === "function") {
+    window.setFontSize = (size: number) => setFontSize(size);
+  }
+}, []);
+
+
+// --- Font Size Control ---
+function setFontSize(size: number) {
+  const sel = selectedRef.current;
+  if (!sel) return alert("Please select a cell first.");
+
+  setFormats(prev => ({
+    ...prev,
+    [sel]: { ...(prev[sel] || {}), fontSize: size },
+  }));
+}
+
+useEffect(() => {
+  if (typeof setFontSize === "function") {
+    window.setFontSize = (size: number) => setFontSize(size);
+  }
+}, []);
+
+// ✅ Expose helpers globally ONCE (safe place for useEffect)
+useEffect(() => {
+  window.importCSV = importCSV;
+  window.cellsToCSV = cellsToCSV;
+  window.clearSheet = clearSheet;
+}, []);
+
 
   /** Keyboard shortcuts (do not fire when typing in an input field) */
   useEffect(() => {
@@ -727,31 +904,29 @@ useEffect(() => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [effectiveKey]);
 
-useEffect(() => {
-  onImportCSV?.(importCSV);
-  onDownloadCSV?.(() => cellsToCSV());
-  onClearSheet?.(clearSheet);
-}, [onImportCSV, onDownloadCSV, onClearSheet, cells]);
 
   /** Autosave */
   useEffect(() => {
-    const payload = {
-      cells,
-      selected: selectedRef.current ?? undefined,
-      colWidths,
-      freezeTopRow,
-      freezeFirstCol,
-      formats,
-      rowCount,
-      colCount,
-      condEnabled,
-    };
-    try {
-      localStorage.setItem(effectiveKey, JSON.stringify(payload));
-    } catch (e) {
-      console.warn("Failed saving sheet to localStorage:", e);
-    }
-  }, [cells, colWidths, freezeTopRow, freezeFirstCol, formats, rowCount, colCount, condEnabled, effectiveKey]);
+  const payload = {
+    cells,
+    colWidths,
+    freezeTopRow,
+    freezeFirstCol,
+    formats,
+    rowCount,
+    colCount,
+    condEnabled,
+  };
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(payload));
+  } catch (e) {
+    console.warn("Failed saving sheet to localStorage:", e);
+  }
+}, [cells, colWidths, freezeTopRow, freezeFirstCol, formats, rowCount, colCount, condEnabled, storageKey]);
+
+ 
+ 
+
 
   /** Formatting helpers */
   function toggleBold() {
@@ -798,6 +973,17 @@ useEffect(() => {
       return copy;
     });
   }
+  // 🖋️ Font family setter (applies font style to selected cells)
+function setFontFamily(family: string) {
+  const sel = selectedRef.current;
+  if (!sel) return;
+  pushHistory();
+  setFormats((prev) => ({
+    ...prev,
+    [sel]: { ...(prev[sel] || {}), fontFamily: family },
+  }));
+}
+
   function setColor(color: string) {
     pushHistory();
     setFormats(prev => {
@@ -1312,10 +1498,6 @@ try {
   // leave 
   // as-is on any error
 }
-
-
-
-
     return (
       <div
         key={keyOverride ?? id}
@@ -1363,24 +1545,40 @@ try {
   textAlign,
   outline: isSelected ? "2px solid #3b82f6" : "none",
   outlineOffset: -2,
+    fontSize: fmt.fontSize ? `${fmt.fontSize}px` : "13px",
+    fontFamily: fmt.fontFamily || "Arial, sans-serif",
+    border: fmt.border ?? `1px solid ${pal.border}`,
+
 }}
 
       >
-        {editing === id ? (
-          <input
-            autoFocus
-            style={{ width: "100%", height: "100%", border: "none", outline: "none", fontSize: 13, textAlign }}
-            value={formulaBar}
-            onChange={(e) => setFormulaBar(e.target.value)}
-            onBlur={() => commitEdit(id, formulaBar)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") commitEdit(id, formulaBar);
-              else if (e.key === "Escape") { setEditing(null); setFormulaBar(""); }
-            }}
-          />
-        ) : (
-          <span>{displayText as any}</span>
-        )}
+   {editing === id ? (
+  <input
+    autoFocus
+    style={{
+      width: "100%",
+      height: "100%",
+      border: "none",
+      outline: "none",
+      fontSize: 13,
+      textAlign,
+      background: theme === "dark" ? "#1e293b" : "#ffffff", // dark: slate background, light: white
+      color: theme === "dark" ? "#f1f5f9" : "#0f172a",        // dark: light text, light: dark text
+      padding: "0 4px",
+      borderRadius: 2,
+    }}
+    value={formulaBar}
+    onChange={(e) => setFormulaBar(e.target.value)}
+    onBlur={() => commitEdit(id, formulaBar)}
+    onKeyDown={(e) => {
+      if (e.key === "Enter") commitEdit(id, formulaBar);
+      else if (e.key === "Escape") { setEditing(null); setFormulaBar(""); }
+    }}
+  />
+) : (
+  <span>{displayText as any}</span>
+)}
+
 
         {/* Fill handle */}
         {isSelected && editing !== id && (
@@ -1492,115 +1690,232 @@ const currentFmt =
         >
           {`${sheetName}${selectedRef.current ? ` • ${selectedRef.current}` : ""}`}
         </span>
+{/* Enhanced Formula Bar */}
+<div
+  style={{
+    flex: 1,
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    minWidth: "650px", // ✅ wider default
+    maxWidth: "100%",
+  }}
+>
+  <input
+    className="formula-bar w-full max-w-[950px]" // ✅ longer, animated
+    value={formulaBar}
+    onChange={(e) => setFormulaBar(e.target.value)}
+    onKeyDown={(e) => {
+      if (e.key === "Enter" && selectedRef.current) {
+        commitEdit(selectedRef.current, formulaBar);
+      }
+    }}
+    placeholder="Type value or =formula"
+  />
+</div>
 
-        <input
-          className="toolbar-input flex-1 min-w-[260px]"
-          style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-          value={formulaBar}
-          onChange={(e) => setFormulaBar(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && selectedRef.current) {
-              commitEdit(selectedRef.current, formulaBar);
-            }
-          }}
-          placeholder="Type value or =formula"
-        />
-
-       
 
         {/* C) Freeze + Insert/Delete + Conditional Format (unchanged) */}
-        <div className="flex items-center gap-2">
-          <button
-            className={`toolbar-btn ${freezeTopRow ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300" : ""}`}
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            onClick={() => { pushHistory(); setFreezeTopRow(v => !v); }}
-          >
-            {freezeTopRow ? "Unfreeze Top Row" : "Freeze Top Row"}
-          </button>
+      {/* C) Freeze + Insert/Delete + Conditional Format */}  
+<div className="flex items-center gap-2">
+  
+  {/* 🎨 Conditional Formatting Controls */}
+  <div className="flex items-center gap-2">
+    <button
+      onClick={() => setShowCondModal(true)}
+      className="toolbar-btn"
+      style={{
+        border: `1px solid ${pal.border}`,
+        background: pal.surface,
+        color: pal.text,
+      }}
+    >
+      ✨ Conditional Format
+    </button>
 
-          <button
-            onClick={() => setShowCondModal(true)}
-            style={{
-              padding: "6px 10px",
-              borderRadius: 6,
-              cursor: "pointer",
-              border: `1px solid ${pal.border}`,
-              background: pal.surface,
-              color: pal.text,
-            }}
-          >
-            Conditional Format
-          </button>
+    {/* 🟢 Toggle switch for ON/OFF */}
+    <label className="toggle-switch">
+      <input
+        type="checkbox"
+        checked={condEnabled}
+        onChange={(e) => setCondEnabled(e.target.checked)}
+      />
+      <span className="slider" />
+      <span className="toggle-label">{condEnabled ? "ON" : "OFF"}</span>
+    </label>
+  </div>
 
-          <button
-            className={`toolbar-btn ${freezeFirstCol ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300" : ""}`}
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            onClick={() => { pushHistory(); setFreezeFirstCol(v => !v); }}
-          >
-            {freezeFirstCol ? "Unfreeze First Column" : "Freeze First Column"}
-          </button>
+  <button
+    className={`toolbar-btn ${freezeTopRow ? "active" : ""}`}
+    onClick={() => {
+      pushHistory();
+      setFreezeTopRow((v) => !v);
+    }}
+  >
+    {freezeTopRow ? "🧊 Unfreeze Top Row" : "❄️ Freeze Top Row"}
+  </button>
 
-          <button
-            className="toolbar-btn"
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            title="+ Row"
-            onClick={() => { const p = anchorRC(); if (!p) return; insertRowAt(p.row); }}
-          >
-            + Row
-          </button>
+  <button
+    className={`toolbar-btn ${freezeFirstCol ? "active" : ""}`}
+    onClick={() => {
+      pushHistory();
+      setFreezeFirstCol((v) => !v);
+    }}
+  >
+    {freezeFirstCol ? "🧊 Unfreeze First Column" : "❄️ Freeze First Column"}
+  </button>
 
-          <button
-            className="toolbar-btn bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300"
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            title="− Row"
-            onClick={() => { const p = anchorRC(); if (!p) return; deleteRowAt(p.row); }}
-          >
-            − Row
-          </button>
+  <button
+    className="toolbar-btn"
+    style={{
+      background: pal.surface,
+      color: pal.text,
+      border: `1px solid ${pal.border}`,
+    }}
+    title="+ Row"
+    onClick={() => {
+      const p = anchorRC();
+      if (!p) return;
+      insertRowAt(p.row);
+    }}
+  >
+    ➕ Row
+  </button>
 
-          <button
-            className="toolbar-btn"
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            title="+ Col"
-            onClick={() => { const p = anchorRC(); if (!p) return; insertColAt(p.col); }}
-          >
-            + Col
-          </button>
+  <button
+    className="toolbar-btn danger"
+    title="− Row"
+    onClick={() => {
+      const p = anchorRC();
+      if (!p) return;
+      deleteRowAt(p.row);
+    }}
+  >
+    🗑️− Row
+  </button>
+  <button
+    className="toolbar-btn"
+    style={{
+      background: pal.surface,
+      color: pal.text,
+      border: `1px solid ${pal.border}`,
+    }}
+    title="+ Col"
+    onClick={() => {
+      const p = anchorRC();
+      if (!p) return;
+      insertColAt(p.col);
+    }}
+  >
+    ➕  Col
+  </button>
 
-          <button
-            className="toolbar-btn bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300"
-            style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-            title="− Col"
-            onClick={() => { const p = anchorRC(); if (!p) return; deleteColAt(p.col); }}
-          >
-            − Col
-          </button>
-        </div>
+  <button
+    className="toolbar-btn danger"
+    title="− Col"
+    onClick={() => {
+      const p = anchorRC();
+      if (!p) return;
+      deleteColAt(p.col);
+    }}
+  >
+    🗑️ − Col
+  </button>
+</div>
 
-        <span className="toolbar-sep" />
+        {/* 🎨 Font & Text Controls */}
+<div className="flex items-center gap-3">
 
-        {/* D) Text formatting (unchanged) */}
-        <div className="flex items-center gap-2">
-          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} title="Bold" onClick={toggleBold}>B</button>
-          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} title="Italic" onClick={toggleItalic}><i>I</i></button>
-          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} title="Align Left"   onClick={() => setAlign("left")}>⟸</button>
-          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} title="Align Center" onClick={() => setAlign("center")}>≡</button>
-          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} title="Align Right"  onClick={() => setAlign("right")}>⟹</button>
+  {/* Font Size */}
+  <div className="flex items-center gap-2">
+    <label
+      style={{
+        fontSize: 13,
+        color: pal.textMuted,
+        userSelect: "none",
+      }}
+    >
+      Font Size:
+    </label>
 
-          <label className="text-xs flex items-center gap-1.5">
-            <span>Fill</span>
-            <input type="color" className="h-8 w-10 rounded-md border border-slate-300 dark:border-slate-700"
-              onChange={(e) => setBg(e.target.value)} />
-          </label>
+    <select
+      className="format-btn font-size-btn"
+      onChange={(e) => window.setFontSize?.(parseInt(e.target.value))}
+      defaultValue={13}
+    >
+      {[8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 22, 24, 28, 32, 36, 48, 72].map(
+        (size) => (
+          <option key={size} value={size}>
+            {size}
+          </option>
+        )
+      )}
+    </select>
+  </div>
 
-          <label className="text-xs flex items-center gap-1.5">
-            <span>Text</span>
-            <input type="color" className="h-8 w-10 rounded-md border border-slate-300 dark:border-slate-700"
-              onChange={(e) => setColor(e.target.value)} />
-          </label>
-        </div>
+  {/* Text Style Buttons */}
+  <div className="flex items-center gap-2">
+    <button
+      className="format-btn"
+      title="Bold"
+      onClick={toggleBold}
+    >
+      <b>B</b>
+    </button>
+    <button
+      className="format-btn"
+      title="Italic"
+      onClick={toggleItalic}
+    >
+      <i>I</i>
+    </button>
+    <button
+      className="format-btn"
+      title="Align Left"
+      onClick={() => setAlign("left")}
+    >
+      ⟸
+    </button>
+    <button
+      className="format-btn"
+      title="Align Center"
+      onClick={() => setAlign("center")}
+    >
+      ≡
+    </button>
+    <button
+      className="format-btn"
+      title="Align Right"
+      onClick={() => setAlign("right")}
+    >
+      ⟹
+    </button>
+  </div>
 
-        <span className="toolbar-sep" />
+  {/* Color Pickers (unchanged) */}
+  <div className="flex items-center gap-2">
+    <label className="text-xs flex items-center gap-1.5">
+      <span>Fill</span>
+      <input
+        type="color"
+        className="h-8 w-10 rounded-md border border-slate-300 dark:border-slate-700"
+        onChange={(e) => setBg(e.target.value)}
+      />
+    </label>
+
+    <label className="text-xs flex items-center gap-1.5">
+      <span>Text</span>
+      <input
+        type="color"
+        className="h-8 w-10 rounded-md border border-slate-300 dark:border-slate-700"
+        onChange={(e) => setColor(e.target.value)}
+      />
+    </label>
+  </div>
+</div>
+
+<span className="toolbar-sep" />
+
 
         {/* E) Number format (General/Number/Currency/Percent/Date) (unchanged) */}
         <div className="flex items-center gap-2">
@@ -1654,11 +1969,14 @@ const currentFmt =
             <input type="checkbox" checked={matchCase} onChange={(e) => setMatchCase(e.target.checked)} />
             Match case
           </label>
-          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} onClick={prevHit} title="Previous">Prev</button>
-          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} onClick={nextHit} title="Next">Next</button>
-          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} onClick={replaceCurrent} title="Replace current">Replace</button>
-          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} onClick={replaceAll} title="Replace all">Replace All</button>
-          <button className="toolbar-btn" style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }} onClick={clearFind} title="Clear search">Clear</button>
+          <div className="toolbar-btn-group">
+  <button className="toolbar-btn" onClick={prevHit} title="Previous">Prev</button>
+  <button className="toolbar-btn" onClick={nextHit} title="Next">Next</button>
+  <button className="toolbar-btn" onClick={replaceCurrent} title="Replace current">Replace</button>
+  <button className="toolbar-btn" onClick={replaceAll} title="Replace all">Replace All</button>
+  <button className="toolbar-btn" onClick={clearFind} title="Clear search">Clear</button>
+</div>
+
           <span className="text-xs" style={{ color: pal.text }}>
             {findHits.length ? `${hitIndex + 1}/${findHits.length}` : "0 results"}
           </span>
@@ -1669,75 +1987,312 @@ const currentFmt =
     /* Non-Home tabs: simple placeholder without changing logic */
     <div className="px-3 py-3" style={{ background: pal.surfaceAlt, color: pal.text }}>
    {/* ===== Insert Tab (replace your current insert tab block) ===== */}
+{/* ===== Insert Tab (Improved with sheet name + formula bar) ===== */}
 {ribbonTab === "insert" && (
   <div
     style={{
       display: "flex",
-      gap: 12,
-      alignItems: "flex-start",
+      gap: 16,
+      alignItems: "center",
       flexWrap: "wrap",
       padding: 8,
+      background: pal.surface,
+      borderRadius: 8,
+      border: `1px solid ${pal.border}`,
     }}
   >
-    {/* Formula bar — still visible inside insert tab, mirrors grid selection */}
-    <input
-      className="toolbar-input flex-1 min-w-[260px]"
-      style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
-      value={formulaBar}
-      onChange={(e) => setFormulaBar(e.target.value)}
-      onKeyDown={(e) => {
-        // Prevent accidental form submit and commit only when Enter is pressed
-        if (e.key === "Enter") {
-          e.preventDefault();
-          const sel = selectedRef.current;
-          if (sel) commitEdit(sel, formulaBar);
-        }
+    {/* 🧾 Name chip + Formula Bar (same as Home tab) */}
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        flex: 1,
+        minWidth: "650px",
+        justifyContent: "center",
       }}
-      placeholder="Type value or =formula"
-      aria-label="Formula bar"
-    />
+    >
+      {/* Sheet name + cell indicator */}
+      <span
+        className="toolbar-chip"
+        style={{
+          background: pal.surface,
+          color: pal.text,
+          border: `1px solid ${pal.border}`,
+          borderRadius: 6,
+          padding: "4px 10px",
+          fontSize: 13,
+          fontWeight: 600,
+        }}
+      >
+        {`${sheetName}${selectedRef.current ? ` • ${selectedRef.current}` : ""}`}
+      </span>
 
-    {/* Group: Date / DateTime (separate buttons) */}
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ fontSize: 12, color: "#6b7280", fontWeight: 700 }}>Time</div>
+      {/* Formula Bar */}
+      <input
+        className="formula-bar w-full max-w-[950px]"
+        style={{
+          flex: 1,
+          border: `1px solid ${pal.border}`,
+          borderRadius: 6,
+          padding: "6px 10px",
+          background: pal.surfaceAlt,
+          color: pal.text,
+          transition: "all 0.2s ease",
+        }}
+        value={formulaBar}
+        onChange={(e) => setFormulaBar(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && selectedRef.current) {
+            commitEdit(selectedRef.current, formulaBar);
+          }
+        }}
+        placeholder="Type value or =formula"
+      />
+    </div>
 
-      <div style={{ display: "flex", gap: 8 }}>
+    {/* 🕒 Time Group: Insert Date / DateTime */}
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        background: pal.surfaceAlt,
+        borderRadius: 6,
+        padding: "8px 10px",
+        border: `1px solid ${pal.border}`,
+      }}
+    >
+      <div style={{ fontSize: 12, color: "#6b7280", fontWeight: 700 }}>
+        Time
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button
           type="button"
+          className="toolbar-btn"
           onClick={() => {
             const sel = selectedRef.current;
             if (!sel) return alert("Select a cell first");
-            // insertCurrentDateTime(false) should write the date into the selected cell
             insertCurrentDateTime(false);
           }}
-          style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
         >
-          Insert Date
+          📅 Insert Date
         </button>
 
         <button
           type="button"
+          className="toolbar-btn"
           onClick={() => {
             const sel = selectedRef.current;
             if (!sel) return alert("Select a cell first");
             insertCurrentDateTime(true);
           }}
-          style={{ background: pal.surface, color: pal.text, border: `1px solid ${pal.border}` }}
         >
-          Insert DateTime
+          ⏰ Insert DateTime
         </button>
-        <button type="button" onClick={() => { if (!range) return alert("Select a data range first"); setShowPivotModal(true); }}>
-   Pivot Table
-  </button>
+        <button
+  type="button"
+  className="toolbar-btn"
+  onClick={() => setShowShapesModal(true)}
+>
+  ➕ Insert Shapes
+</button>
+
+        <button
+          type="button"
+          className="toolbar-btn"
+          onClick={() => {
+            if (!range) return alert("Select a data range first");
+            setShowPivotModal(true);
+          }}
+        >
+          
+
+          📊 Pivot Table
+        </button>
+        <button
+  type="button"
+  className="toolbar-btn"
+  onClick={() => setShowTableModal(true)}
+>
+  📋 Insert Table
+</button>
+
+
       </div>
     </div>
+    {/* 🎨 Font Selector (opens modal) */}
+<div
+  style={{
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    background: pal.surfaceAlt,
+    borderRadius: 8,
+    padding: 10,
+    border: `1px solid ${pal.border}`,
+    minWidth: 260,
+  }}
+>
+  <div style={{ fontSize: 12, fontWeight: 700, color: pal.text }}>Text Fonts</div>
+
+  <button
+    onClick={() => setShowFontModal(true)}
+    style={{
+      padding: "8px 12px",
+      borderRadius: 8,
+      border: `1px solid ${pal.border}`,
+      background: pal.surface,
+      color: pal.text,
+      fontWeight: 600,
+      cursor: "pointer",
+      transition: "all 0.2s ease",
+    }}
+    onMouseEnter={(e) => {
+      e.currentTarget.style.transform = "translateY(-1px)";
+      e.currentTarget.style.boxShadow = "0 4px 10px rgba(0,0,0,0.15)";
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.transform = "translateY(0)";
+      e.currentTarget.style.boxShadow = "none";
+    }}
+  >
+    🖋️ Choose Font
+  </button>
+</div>
+
   </div>
 )}
+
 
 
     </div>
   )}
 </div>
+{/* ===== View Tab ===== */}
+{ribbonTab === "view" && (
+  <div
+    style={{
+      display: "flex",
+      gap: 16,
+      alignItems: "center",
+      flexWrap: "wrap",
+      padding: 8,
+      background: pal.surface,
+      borderRadius: 8,
+      border: `1px solid ${pal.border}`,
+    }}
+  >
+    {/* 🧾 Sheet name + Cell Indicator + Formula Bar */}
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        flex: 1,
+        minWidth: "650px",
+        justifyContent: "center",
+      }}
+    >
+      {/* Sheet name + cell indicator */}
+      <span
+        className="toolbar-chip"
+        style={{
+          background: pal.surface,
+          color: pal.text,
+          border: `1px solid ${pal.border}`,
+          borderRadius: 6,
+          padding: "4px 10px",
+          fontSize: 13,
+          fontWeight: 600,
+        }}
+      >
+        {`${sheetName}${selectedRef.current ? ` • ${selectedRef.current}` : ""}`}
+      </span>
+
+      {/* Formula Bar */}
+      <input
+        className="formula-bar w-full max-w-[950px]"
+        style={{
+          flex: 1,
+          border: `1px solid ${pal.border}`,
+          borderRadius: 6,
+          padding: "6px 10px",
+          background: pal.surfaceAlt,
+          color: pal.text,
+          transition: "all 0.2s ease",
+        }}
+        value={formulaBar}
+        onChange={(e) => setFormulaBar(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && selectedRef.current) {
+            commitEdit(selectedRef.current, formulaBar);
+          }
+        }}
+        placeholder="Type value or =formula"
+      />
+    </div>
+
+      {/* 👁 View Options (with working zoom) */}
+
+{/* 👁 View Options (Zoom in dialog) */}
+<div
+  style={{
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    background: pal.surfaceAlt,
+    borderRadius: 6,
+    padding: "10px 12px",
+    border: `1px solid ${pal.border}`,
+    minWidth: 240,
+  }}
+>
+  <div style={{ fontSize: 12, fontWeight: 700, color: pal.text }}>
+    View Options
+  </div>
+
+  {/* Single Zoom Options Button */}
+  <button
+    className="toolbar-btn"
+    style={{
+      background: pal.surface,
+      color: pal.text,
+      border: `1px solid ${pal.border}`,
+      padding: "6px 12px",
+      borderRadius: 6,
+      cursor: "pointer",
+      transition: "all 0.2s ease",
+    }}
+    onClick={() => setShowZoomModal(true)}
+  >
+    🔍 Zoom Options
+  </button>
+  {/* Formula Functions Button */}
+<button
+  className="toolbar-btn"
+  style={{
+    background: pal.surface,
+    color: pal.text,
+    border: `1px solid ${pal.border}`,
+    padding: "6px 12px",
+    borderRadius: 6,
+    cursor: "pointer",
+    transition: "all 0.2s ease",
+  }}
+  onClick={() => setShowFormulaModal(true)}
+>
+  🧮 Formula Functions
+</button>
+
+</div>
+
+
+    
+  </div>
+)}
+
 
 
 
@@ -1814,7 +2369,10 @@ color: pal.text,
                 fontWeight: 600,
                 userSelect: "none",
                 
-                position: "relative"
+                position: "relative",
+                transform: `scale(${zoom})`,
+transformOrigin: "top left",
+
               }}
             >
               {colIndexToName(c)}
@@ -1847,10 +2405,309 @@ color: pal.text,
               >
                 {allCols.map(c => renderCell(r, c))}
               </div>
+              
             );
             
           })}
         </div>
+        {/* === SHAPES LAYER === */}
+{/* === SHAPES LAYER (with dragging) === */}
+{/* === SHAPES LAYER (drag + resize + select) === */}
+{shapes.map((s) => {
+  const isSelected = s.id === selectedShapeId;
+
+  return (
+    <div
+      key={s.id}
+       
+  data-shape
+      onMouseDown={(e) => {
+        if ((e.target as HTMLElement).dataset.handle) return;
+        e.stopPropagation();
+        setSelectedShapeId(s.id);
+
+        // drag logic
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const origX = s.x;
+        const origY = s.y;
+
+        const onMove = (ev: MouseEvent) => {
+          const dx = ev.clientX - startX;
+          const dy = ev.clientY - startY;
+          setShapes((prev) =>
+            prev.map((sh) =>
+              sh.id === s.id ? { ...sh, x: origX + dx, y: origY + dy } : sh
+            )
+          );
+        };
+        const onUp = () => {
+          window.removeEventListener("mousemove", onMove);
+          window.removeEventListener("mouseup", onUp);
+        };
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup", onUp);
+      }}
+      style={{
+        position: "absolute",
+        left: s.x,
+        top: s.y,
+        width: s.width,
+        height: s.height,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        cursor: "move",
+        pointerEvents: "auto",
+        zIndex: isSelected ? 60 : 50,
+        userSelect: "none",
+        boxShadow: isSelected ? "0 0 0 2px #3b82f6" : "none",
+        borderRadius: 4,
+        transition: "box-shadow 0.15s ease",
+      }}
+    >
+      <svg
+        width="100%"
+        height="100%"
+        viewBox="0 0 100 60"
+        style={{ fill: s.color, opacity: 0.85, pointerEvents: "none" }}
+      >
+        {s.type === "rect" && <rect x="0" y="0" width="100" height="60" rx="6" />}
+        {s.type === "circle" && <circle cx="50" cy="30" r="25" />}
+        {s.type === "triangle" && <path d="M10 55 L50 5 L90 55 Z" />}
+        {s.type === "arrow" && (
+          <path
+            d="M10 30 H70 L60 20 M70 30 L60 40"
+            stroke="#fff"
+            strokeWidth="4"
+            fill="none"
+          />
+        )}
+        {s.type === "line" && (
+          <line x1="10" y1="30" x2="90" y2="30" stroke="#fff" strokeWidth="4" />
+        )}
+        {s.type === "diamond" && <path d="M50 5 L95 30 L50 55 L5 30 Z" />}
+        {s.type === "star" && (
+          <path d="M50 5 L60 25 L85 25 L65 40 L75 55 L50 45 L25 55 L35 40 L15 25 L40 25 Z" />
+        )}
+        {s.type === "heart" && (
+          <path d="M50 55 C20 25, 20 5, 50 25 C80 5, 80 25, 50 55 Z" />
+        )}
+        {s.type === "cloud" && (
+          <path d="M20 40 a20,20 0 1,0 10,-30 a15,15 0 1,0 10,30 Z" />
+        )}
+        {s.type === "textbox" && (
+          <>
+            <rect x="0" y="0" width="100" height="60" rx="6" />
+            <text
+              x="50%"
+              y="55%"
+              textAnchor="middle"
+              fontSize="12"
+              fill="#fff"
+            >
+              Text
+            </text>
+          </>
+        )}
+      </svg>
+
+      {/* Show resize handles only if selected */}
+      {isSelected &&
+        [
+          { pos: "tl", x: 0, y: 0, cursor: "nwse-resize" },
+          { pos: "tr", x: "100%", y: 0, cursor: "nesw-resize" },
+          { pos: "bl", x: 0, y: "100%", cursor: "nesw-resize" },
+          { pos: "br", x: "100%", y: "100%", cursor: "nwse-resize" },
+          { pos: "tm", x: "50%", y: 0, cursor: "ns-resize" },
+          { pos: "bm", x: "50%", y: "100%", cursor: "ns-resize" },
+          { pos: "ml", x: 0, y: "50%", cursor: "ew-resize" },
+          { pos: "mr", x: "100%", y: "50%", cursor: "ew-resize" },
+        ].map((h) => (
+          <div
+            key={h.pos}
+            data-handle
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              const startX = e.clientX;
+              const startY = e.clientY;
+              const orig = { ...s };
+
+              const onMove = (ev: MouseEvent) => {
+                const dx = ev.clientX - startX;
+                const dy = ev.clientY - startY;
+                setShapes((prev) =>
+                  prev.map((sh) => {
+                    if (sh.id !== s.id) return sh;
+                    let { x, y, width, height } = orig;
+                    switch (h.pos) {
+                      case "tl": x += dx; y += dy; width -= dx; height -= dy; break;
+                      case "tr": y += dy; width += dx; height -= dy; break;
+                      case "bl": x += dx; width -= dx; height += dy; break;
+                      case "br": width += dx; height += dy; break;
+                      case "tm": y += dy; height -= dy; break;
+                      case "bm": height += dy; break;
+                      case "ml": x += dx; width -= dx; break;
+                      case "mr": width += dx; break;
+                    }
+                    width = Math.max(30, width);
+                    height = Math.max(20, height);
+                    return { ...sh, x, y, width, height };
+                  })
+                );
+              };
+              const onUp = () => {
+                window.removeEventListener("mousemove", onMove);
+                window.removeEventListener("mouseup", onUp);
+              };
+              window.addEventListener("mousemove", onMove);
+              window.addEventListener("mouseup", onUp);
+            }}
+            style={{
+              position: "absolute",
+              left: h.x,
+              top: h.y,
+              transform: "translate(-50%, -50%)",
+              width: 8,
+              height: 8,
+              borderRadius: 2,
+              background: "#3b82f6",
+              cursor: h.cursor,
+              zIndex: 70,
+            }}
+          />
+        ))}
+    </div>
+  );
+})}
+
+{/* Clear selection when clicking empty space */}
+{/* Clear selection when clicking empty area (below shapes, above grid) */}
+{/* Clear selection only when a shape is selected */}
+{selectedShapeId && (
+  <div
+    onMouseDown={(e) => {
+      // Only clear if not clicking a shape or handle
+      if (!(e.target as HTMLElement).closest("[data-shape]")) {
+        setSelectedShapeId(null);
+      }
+    }}
+    style={{
+      position: "absolute",
+      inset: 0,
+      zIndex: 1,
+      cursor: "default",
+      background: "transparent",
+    }}
+  />
+)}
+
+
+
+
+
+
+{/* ===== Table Insert Dialog ===== */}
+{showTableModal && (
+  <div
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0,0,0,0.5)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 1200,
+    }}
+    onClick={() => setShowTableModal(false)}
+  >
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        background: pal.surface,
+        color: pal.text,
+        padding: 24,
+        borderRadius: 12,
+        width: 320,
+        display: "flex",
+        flexDirection: "column",
+        gap: 14,
+        border: `1px solid ${pal.border}`,
+        boxShadow: "0 10px 25px rgba(0,0,0,0.25)",
+      }}
+    >
+      <h3 style={{ margin: 0, fontSize: 16 }}>Insert Table</h3>
+
+      <label style={{ fontSize: 13 }}>
+        Rows:
+        <input
+          type="number"
+          min={1}
+          max={50}
+          value={tableSize.rows}
+          onChange={(e) =>
+            setTableSize((prev) => ({
+              ...prev,
+              rows: Math.max(1, Math.min(50, +e.target.value || 1)),
+            }))
+          }
+          style={{
+            marginLeft: 8,
+            padding: 6,
+            width: 60,
+            borderRadius: 6,
+            border: `1px solid ${pal.border}`,
+            background: pal.surfaceAlt,
+            color: pal.text,
+          }}
+        />
+      </label>
+
+      <label style={{ fontSize: 13 }}>
+        Columns:
+        <input
+          type="number"
+          min={1}
+          max={50}
+          value={tableSize.cols}
+          onChange={(e) =>
+            setTableSize((prev) => ({
+              ...prev,
+              cols: Math.max(1, Math.min(50, +e.target.value || 1)),
+            }))
+          }
+          style={{
+            marginLeft: 8,
+            padding: 6,
+            width: 60,
+            borderRadius: 6,
+            border: `1px solid ${pal.border}`,
+            background: pal.surfaceAlt,
+            color: pal.text,
+          }}
+        />
+      </label>
+
+      <button
+        className="toolbar-btn"
+        onClick={() => {
+          insertTable(tableSize.rows, tableSize.cols);
+          setShowTableModal(false);
+        }}
+      >
+        ✅ Insert
+      </button>
+
+      <button
+        className="toolbar-btn danger"
+        onClick={() => setShowTableModal(false)}
+      >
+        ✖ Close
+      </button>
+    </div>
+  </div>
+)}
+
         {showCondModal && (
   <div
     style={{
@@ -1965,6 +2822,487 @@ color: pal.text,
     </div>
   </div>
 )}
+{/* ===== Formula Modal ===== */}
+{showFormulaModal && (
+  <div
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0,0,0,0.45)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 1000,
+    }}
+    onClick={() => setShowFormulaModal(false)}
+  >
+    <div
+      style={{
+        background: pal.surface,
+        color: pal.text,
+        padding: 20,
+        borderRadius: 10,
+        width: 380,
+        display: "flex",
+        flexDirection: "column",
+        gap: 16,
+        boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
+        border: `1px solid ${pal.border}`,
+        transition: "transform 0.2s ease",
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <h3 style={{ margin: 0, textAlign: "center" }}>🧮 Insert Formula</h3>
+
+      <p style={{ fontSize: 13, color: pal.textMuted, textAlign: "center" }}>
+        Choose a formula to insert into the selected cell:
+      </p>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        {[
+          { name: "SUM", desc: "Total of values" },
+          { name: "AVERAGE", desc: "Mean of values" },
+          { name: "COUNT", desc: "Number of items" },
+          { name: "MAX", desc: "Highest value" },
+          { name: "MIN", desc: "Lowest value" },
+        ].map((f) => (
+          <button
+            key={f.name}
+            className="toolbar-btn"
+            style={{
+              background: pal.surfaceAlt,
+              color: pal.text,
+              border: `1px solid ${pal.border}`,
+              borderRadius: 8,
+              padding: "10px 8px",
+              fontWeight: 600,
+              cursor: "pointer",
+              transition: "transform 0.15s ease, box-shadow 0.2s ease",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = "translateY(-2px)";
+              e.currentTarget.style.boxShadow = "0 6px 12px rgba(0,0,0,0.15)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = "translateY(0)";
+              e.currentTarget.style.boxShadow = "none";
+            }}
+            onClick={() => {
+              const sel = selectedRef.current;
+              if (!sel) return alert("Select a cell first");
+
+              // Default to summing a nearby range if possible
+              const formula = `=${f.name}(A1:A10)`;
+              commitEdit(sel, formula);
+              setShowFormulaModal(false);
+            }}
+          >
+            {f.name}
+            <div style={{ fontSize: 11, opacity: 0.7 }}>{f.desc}</div>
+          </button>
+        ))}
+      </div>
+
+      <button
+        onClick={() => setShowFormulaModal(false)}
+        style={{
+          alignSelf: "center",
+          marginTop: 10,
+          background: "#2563eb",
+          color: "white",
+          border: "none",
+          borderRadius: 6,
+          padding: "6px 14px",
+          cursor: "pointer",
+          fontWeight: 600,
+        }}
+      >
+        Close
+      </button>
+    </div>
+  </div>
+)}
+
+
+{/* ===== Zoom Modal ===== */}
+{showZoomModal && (
+  <div
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0,0,0,0.45)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 1000,
+      transition: "opacity 0.2s ease",
+    }}
+    onClick={() => setShowZoomModal(false)}
+  >
+    <div
+      style={{
+        background: pal.surface,
+        color: pal.text,
+        padding: 20,
+        borderRadius: 10,
+        width: 360,
+        display: "flex",
+        flexDirection: "column",
+        gap: 14,
+        boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
+        border: `1px solid ${pal.border}`,
+        transform: "scale(1)",
+        transition: "transform 0.2s ease",
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <h3 style={{ margin: 0, color: pal.text, textAlign: "center" }}>
+        🔍 Zoom Settings
+      </h3>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 12 }}>Zoom:</span>
+        <input
+          type="range"
+          min="0.5"
+          max="2"
+          step="0.1"
+          value={zoom}
+          onChange={(e) => setZoom(parseFloat(e.target.value))}
+          style={{ flex: 1, cursor: "pointer" }}
+        />
+        <span style={{ fontSize: 12 }}>{Math.round(zoom * 100)}%</span>
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+        <button
+          className="toolbar-btn"
+          style={{
+            flex: 1,
+            background: pal.surfaceAlt,
+            color: pal.text,
+            border: `1px solid ${pal.border}`,
+          }}
+          onClick={() => setZoom((z) => Math.min(2, z + 0.1))}
+        >
+          ➕ Zoom In
+        </button>
+        <button
+          className="toolbar-btn"
+          style={{
+            flex: 1,
+            background: pal.surfaceAlt,
+            color: pal.text,
+            border: `1px solid ${pal.border}`,
+          }}
+          onClick={() => setZoom((z) => Math.max(0.5, z - 0.1))}
+        >
+          ➖ Zoom Out
+        </button>
+        <button
+          className="toolbar-btn"
+          style={{
+            flex: 1,
+            background: pal.surfaceAlt,
+            color: pal.text,
+            border: `1px solid ${pal.border}`,
+          }}
+          onClick={() => setZoom(1)}
+        >
+          🔄 Reset
+        </button>
+      </div>
+
+      <button
+        onClick={() => setShowZoomModal(false)}
+        style={{
+          alignSelf: "center",
+          marginTop: 10,
+          background: "#2563eb",
+          color: "white",
+          border: "none",
+          borderRadius: 6,
+          padding: "6px 14px",
+          cursor: "pointer",
+          fontWeight: 600,
+        }}
+      >
+        Close
+      </button>
+    </div>
+  </div>
+)}
+
+{showFontModal && (
+  <div
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0,0,0,0.45)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 1000,
+    }}
+    onClick={() => setShowFontModal(false)}
+  >
+    <div
+  style={{
+    background: pal.surface,
+    color: pal.text,
+    padding: 20,
+    borderRadius: 10,
+    width: 360,
+    height: 420, // ✅ fixed height to prevent vertical jitter
+    display: "flex",
+    flexDirection: "column",
+    border: `1px solid ${pal.border}`,
+    overflow: "hidden", // ✅ contain internal scroll only
+  }}
+  onClick={(e) => e.stopPropagation()}
+>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <h3 style={{ margin: 0, fontSize: 16 }}>Select Font</h3>
+        <button
+          style={{
+            background: "transparent",
+            border: "none",
+            color: pal.text,
+            cursor: "pointer",
+            fontSize: 18,
+            lineHeight: 1,
+          }}
+          onClick={() => setShowFontModal(false)}
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* ✅ Scrollable font list */}
+      <div
+  style={{
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    overflowY: "scroll", // ✅ always show scrollbar to prevent width shift
+    paddingRight: 4,
+    flex: 1,
+  }}
+>
+
+        {[
+          { label: "Arial", value: "Arial, Helvetica, sans-serif" },
+          { label: "Helvetica", value: "Helvetica, Arial, sans-serif" },
+          { label: "Segoe UI", value: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif" },
+          { label: "Times New Roman", value: "'Times New Roman', Times, serif" },
+          { label: "Georgia", value: "Georgia, 'Times New Roman', Times, serif" },
+          { label: "Monaco", value: "Monaco, 'Courier New', monospace" },
+        ].map((f) => (
+          <button
+            key={f.label}
+            onClick={() => {
+              setFontFamily(f.value);
+              setShowFontModal(false);
+            }}
+            style={{
+              fontFamily: f.value,
+              fontSize: 15,
+              padding: "8px 12px",
+              borderRadius: 6,
+              border: `1px solid ${pal.border}`,
+              background: pal.surfaceAlt,
+              color: pal.text,
+              cursor: "pointer",
+              textAlign: "left",
+              transition: "all 0.2s ease",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = pal.selection;
+              e.currentTarget.style.color = "#fff";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = pal.surfaceAlt;
+              e.currentTarget.style.color = pal.text;
+            }}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ✅ Close button stays fixed below */}
+      <button
+        onClick={() => setShowFontModal(false)}
+        style={{
+          marginTop: 10,
+          alignSelf: "flex-end",
+          padding: "6px 14px",
+          borderRadius: 6,
+          background: pal.surfaceAlt,
+          color: pal.text,
+          border: `1px solid ${pal.border}`,
+          cursor: "pointer",
+        }}
+      >
+        Close
+      </button>
+    </div>
+  </div>
+)}
+{showShapesModal && (
+  <div
+    onClick={() => setShowShapesModal(false)}
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0,0,0,0.45)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 1400,
+      // prevent page reflow “shake”
+      willChange: "transform",
+      backfaceVisibility: "hidden",
+    }}
+  >
+    <div
+      onClick={(e) => e.stopPropagation()}
+      role="dialog"
+      aria-modal="true"
+      style={{
+        width: 560,
+        maxWidth: "96vw",
+        maxHeight: "80vh",
+        background: pal.surface,
+        color: pal.text,
+        border: `1px solid ${pal.border}`,
+        borderRadius: 12,
+        boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
+        display: "flex",
+        flexDirection: "column",
+        // no layout jitter:
+        overflow: "hidden",
+        transform: "translateZ(0)", // stabilize GPU layer
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "12px 14px",
+          borderBottom: `1px solid ${pal.border}`,
+        }}
+      >
+        <div style={{ fontWeight: 800 }}>Select Shape</div>
+        <button
+          className="toolbar-btn"
+          onClick={() => setShowShapesModal(false)}
+          aria-label="Close"
+          title="Close"
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* Body (scrolls) */}
+      <div
+        style={{
+          padding: 12,
+          overflow: "auto",
+          // fixed inner height keeps outer box stable
+          maxHeight: "calc(80vh - 58px - 60px)",
+        }}
+      >
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+            gap: 10,
+          }}
+        >
+          {[
+            { label: "Rectangle", type: "rect" as const },
+            { label: "Circle", type: "circle" as const },
+            { label: "Triangle", type: "triangle" as const },
+            { label: "Arrow", type: "arrow" as const },
+            { label: "Line", type: "line" as const },
+            { label: "Diamond", type: "diamond" as const },
+            { label: "Star", type: "star" as const },
+            { label: "Heart", type: "heart" as const },
+            { label: "Cloud", type: "cloud" as const },
+            { label: "Text Box", type: "textbox" as const },
+          ].map((s) => (
+            <button
+              key={s.type}
+              onClick={() => startShapeInsert(s.type)}
+              title={s.label}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+                alignItems: "center",
+                justifyContent: "center",
+                padding: 10,
+                borderRadius: 10,
+                background: pal.surfaceAlt,
+                color: pal.text,
+                border: `1px solid ${pal.border}`,
+                cursor: "pointer",
+                transition: "transform .15s ease, box-shadow .2s ease, background .2s ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "translateY(-2px)";
+                e.currentTarget.style.boxShadow = "0 10px 22px rgba(0,0,0,0.18)";
+                e.currentTarget.style.background = pal.surface;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.boxShadow = "none";
+                e.currentTarget.style.background = pal.surfaceAlt;
+              }}
+            >
+              <div
+                style={{
+                  width: 84,
+                  height: 56,
+                  borderRadius: 8,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: theme === "dark" ? "#0f172a" : "#f8fafc",
+                  border: `1px dashed ${pal.border}`,
+                }}
+              >
+                <ShapeIcon type={s.type} stroke={pal.text} />
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>{s.label}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          gap: 8,
+          padding: 12,
+          borderTop: `1px solid ${pal.border}`,
+        }}
+      >
+        <button className="toolbar-btn" onClick={() => setShowShapesModal(false)}>
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+
 {showPivotModal && range && (
   <div
     onClick={() => setShowPivotModal(false)}
@@ -2117,11 +3455,157 @@ color: pal.text,
     </div>
   </div>
 )}
-// ---------- end pivot block ----------
 
       </div>
     </div>
   </div>
 </div>
 );
+}
+// 🔹 Global animated toolbar button styles (only added once)
+if (typeof document !== "undefined" && !document.getElementById("toolbar-animated-style")) {
+  const style = document.createElement("style");
+  style.id = "toolbar-animated-style";
+  style.textContent = `
+    .toolbar-btn {
+      position: relative;
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid var(--toolbar-border, #cbd5e1);
+      background: var(--toolbar-bg, #ffffff);
+      color: var(--toolbar-text, #0f172a);
+      cursor: pointer;
+      transition: all 0.25s ease, box-shadow 0.3s ease;
+      overflow: hidden;
+      isolation: isolate;
+    }
+
+    /* subtle gradient glow animation on hover */
+    .toolbar-btn::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, transparent, rgba(255,255,255,0.2), transparent);
+      transform: translateX(-100%);
+      transition: transform 0.5s ease;
+      z-index: 1;
+    }
+
+    .toolbar-btn:hover::after {
+      transform: translateX(100%);
+    }
+
+    .toolbar-btn:hover {
+      transform: translateY(-2px) scale(1.04);
+      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+      filter: brightness(1.07);
+      z-index: 2;
+    }
+
+    .toolbar-btn:active {
+      transform: scale(0.96);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+      filter: brightness(0.95);
+    }
+
+    .toolbar-btn:focus-visible {
+      outline: 2px solid #3b82f6;
+      outline-offset: 2px;
+    }
+
+    /* Dark theme overrides */
+    body.dark .toolbar-btn {
+      --toolbar-bg: #1e293b;
+      --toolbar-text: #e2e8f0;
+      --toolbar-border: #334155;
+    }
+
+    body.dark .toolbar-btn:hover {
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+
+    /* Red destructive buttons */
+    .toolbar-btn.danger {
+      background: #fee2e2;
+      color: #b91c1c;
+      border-color: #fecaca;
+    }
+    body.dark .toolbar-btn.danger {
+      background: #7f1d1d;
+      color: #fca5a5;
+      border-color: #b91c1c;
+    }
+
+    /* Emerald active state (like Freeze toggles) */
+    .toolbar-btn.active {
+      background: #d1fae5;
+      color: #065f46;
+      border-color: #34d399;
+    }
+    body.dark .toolbar-btn.active {
+      background: #064e3b;
+      color: #6ee7b7;
+      border-color: #10b981;
+    }
+  `;
+  document.head.appendChild(style);
+}
+// 🌟 Long, animated, theme-aware Formula Bar styling
+if (typeof document !== "undefined" && !document.getElementById("formula-bar-style")) {
+  const style = document.createElement("style");
+  style.id = "formula-bar-style";
+  style.textContent = `
+    .formula-bar {
+      font-size: 15px;
+      padding: 10px 14px;
+      height: 44px;
+      border-radius: 10px;
+      border: 1px solid var(--formula-border, #cbd5e1);
+      background: var(--formula-bg, #ffffff);
+      color: var(--formula-text, #0f172a);
+      outline: none;
+      width: 100%;
+      max-width: 950px;     /* ✅ extra long formula bar */
+      min-width: 650px;
+      box-shadow: inset 0 1px 2px rgba(0,0,0,0.08);
+      transition: all 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+
+    .formula-bar::placeholder {
+      color: var(--formula-placeholder, #94a3b8);
+      opacity: 0.75;
+      transition: opacity 0.3s ease;
+    }
+
+    .formula-bar:hover {
+      box-shadow: 0 0 0 2px rgba(59,130,246,0.1);
+      transform: translateY(-1px);
+    }
+
+    .formula-bar:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.25);
+      background: var(--formula-bg-focus, #ffffff);
+      transform: scale(1.02);
+    }
+
+    body.dark .formula-bar {
+      --formula-bg: #1e293b;
+      --formula-bg-focus: #334155;
+      --formula-text: #f1f5f9;
+      --formula-border: #334155;
+      --formula-placeholder: #64748b;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.4);
+    }
+
+    body.dark .formula-bar:focus {
+      border-color: #60a5fa;
+      box-shadow: 0 0 0 3px rgba(96,165,250,0.3);
+      transform: scale(1.02);
+    }
+  `;
+  document.head.appendChild(style);
 }
