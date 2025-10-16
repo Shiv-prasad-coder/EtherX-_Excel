@@ -22,12 +22,13 @@ const auth = getAuth(app);
 /* ----------------- Component ----------------- */
 interface AuthPageProps {
   theme: "light" | "dark";
-  onAuth: (user: { name: string; email: string }) => void;
+  onAuth: (user: User) => void;
+  savedUser: User | null;
 }
 
 type Step = "login" | "signup" | "verify";
 
-export default function AuthPage({ theme, onAuth }: AuthPageProps) {
+export default function AuthPage({ theme, onAuth, savedUser }: AuthPageProps) {
   const isDark = theme === "dark";
   const C = useMemo(
     () => ({
