@@ -368,13 +368,7 @@ body.dark .formula-bar .formula-action:hover { background: rgba(255,255,255,0.03
   100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* Theme tuned backgrounds */
-:root .formula-bar { /* light defaults */ }
-body.dark .formula-bar {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--toolbar-bg) 92%, #000000 4%), color-mix(in srgb, var(--toolbar-bg) 86%, #000000 8%));
-  border: 1px solid rgba(255,255,255,0.04);
-  box-shadow: 0 6px 20px rgba(0,0,0,0.6);
-}
+
 
 /* small responsive tweak to keep bar thin on mobile */
 @media (max-width: 640px) {
@@ -718,4 +712,332 @@ body.dark .toolbar-btn--text.toolbar-btn--active {
 body.dark .toolbar-btn--text.toolbar-btn--active:hover {
   background: linear-gradient(180deg, rgba(96,165,250,0.35) 0%, rgba(59,130,246,0.25) 100%);
   box-shadow: 0 10px 26px rgba(96,165,250,0.35);
+}
+/* ✨ Toolbar Buttons & Formatting Styles */
+
+.format-btn {
+  border: 1px solid var(--border-color, #ccc);
+  background: var(--surface-color, #f9fafb);
+  color: var(--text-color, #111);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.format-btn:hover {
+  transform: scale(1.08);
+  background: var(--hover-bg, #e2e8f0);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+}
+
+.format-btn.active {
+  background: #3b82f6;
+  color: white;
+  border-color: #2563eb;
+  box-shadow: 0 0 8px rgba(37,99,235,0.6);
+  transform: scale(1.1);
+}
+
+body.dark .format-btn {
+  background: #1e293b;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+body.dark .format-btn:hover {
+  background: #334155;
+}
+
+body.dark .format-btn.active {
+  background: #2563eb;
+  box-shadow: 0 0 10px rgba(96,165,250,0.7);
+}
+/* 🌟 Toolbar Button Animations */
+.toolbar-btn {
+  border: 1px solid var(--border-color, #d1d5db);
+  background: var(--surface-color, #f9fafb);
+  color: var(--text-color, #111827);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  transform: scale(1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* 🔵 Hover effect */
+.toolbar-btn:hover {
+  transform: scale(1.08);
+  background: #e0ecff;
+  box-shadow: 0 3px 6px rgba(59, 130, 246, 0.25);
+  border-color: #3b82f6;
+  color: #1e40af;
+}
+
+/* 🟢 Active (click) effect */
+.toolbar-btn:active {
+  transform: scale(0.95);
+  background: #bfdbfe;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.25);
+}
+
+/* 🧊 Danger button style (e.g. delete row/col) */
+.toolbar-btn.danger {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fca5a5;
+}
+.toolbar-btn.danger:hover {
+  background: #fecaca;
+  transform: scale(1.05);
+  box-shadow: 0 3px 6px rgba(239, 68, 68, 0.3);
+}
+.toolbar-btn.danger:active {
+  background: #fca5a5;
+  transform: scale(0.95);
+}
+
+/* 🌙 Dark mode support */
+body.dark .toolbar-btn {
+  background: #1e293b;
+  color: #e2e8f0;
+  border-color: #334155;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+body.dark .toolbar-btn:hover {
+  background: #334155;
+  color: #93c5fd;
+  box-shadow: 0 3px 6px rgba(147,197,253,0.25);
+}
+
+body.dark .toolbar-btn:active {
+  background: #2563eb;
+  color: white;
+  transform: scale(0.95);
+}
+/* 🎚️ Animated select (dropdown) */
+.toolbar-input {
+  border: 1px solid var(--border-color, #d1d5db);
+  background: var(--surface-color, #f9fafb);
+  color: var(--text-color, #111827);
+  border-radius: 6px;
+  padding: 6px 8px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.toolbar-input:hover {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  transform: scale(1.03);
+}
+
+body.dark .toolbar-input {
+  background: #1e293b;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+body.dark .toolbar-input:hover {
+  background: #334155;
+  border-color: #3b82f6;
+}
+/* 🧩 Grouped toolbar buttons (Find/Replace section) */
+.toolbar-btn-group {
+  display: inline-flex;
+  border: 1px solid var(--border-color, #d1d5db);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.toolbar-btn-group .toolbar-btn {
+  border: none;
+  border-right: 1px solid var(--border-color, #d1d5db);
+  border-radius: 0;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--surface-color, #f9fafb);
+  color: var(--text-color, #111827);
+  transition: all 0.2s ease;
+}
+
+.toolbar-btn-group .toolbar-btn:last-child {
+  border-right: none;
+}
+
+/* ✨ Hover animation for group buttons */
+.toolbar-btn-group .toolbar-btn:hover {
+  background: #e0ecff;
+  color: #1e3a8a;
+  transform: scale(1.05);
+  box-shadow: inset 0 -2px 0 #3b82f6;
+}
+
+/* ⚡ Active click animation */
+.toolbar-btn-group .toolbar-btn:active {
+  background: #bfdbfe;
+  transform: scale(0.95);
+}
+
+/* 🌙 Dark mode */
+body.dark .toolbar-btn-group {
+  border-color: #334155;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+body.dark .toolbar-btn-group .toolbar-btn {
+  background: #1e293b;
+  color: #e2e8f0;
+  border-right-color: #334155;
+}
+
+body.dark .toolbar-btn-group .toolbar-btn:hover {
+  background: #334155;
+  color: #93c5fd;
+  box-shadow: inset 0 -2px 0 #60a5fa;
+}
+/* 🌈 Conditional Formatting Toggle Switch */
+.toggle-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  gap: 6px;
+  user-select: none;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+/* Slider base */
+.slider {
+  position: relative;
+  width: 46px;
+  height: 24px;
+  background-color: #d1d5db;
+  border-radius: 9999px;
+  transition: all 0.3s ease;
+  box-shadow: inset 0 0 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Circular knob */
+.slider::before {
+  content: "";
+  position: absolute;
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  top: 3px;
+  background-color: white;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+/* Toggle on */
+.toggle-switch input:checked + .slider {
+  background-color: #3b82f6; /* blue */
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.5);
+}
+.toggle-switch input:checked + .slider::before {
+  transform: translateX(22px);
+}
+
+/* Label text */
+.toggle-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+  min-width: 30px;
+  text-align: left;
+}
+
+/* 🌙 Dark Mode */
+body.dark .slider {
+  background-color: #475569;
+}
+body.dark .toggle-switch input:checked + .slider {
+  background-color: #60a5fa;
+  box-shadow: 0 0 8px rgba(147, 197, 253, 0.6);
+}
+body.dark .toggle-label {
+  color: #e2e8f0;
+}
+/* 🌈 Conditional Formatting Toggle Switch */
+.toggle-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  gap: 6px;
+  user-select: none;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+/* Base switch slider */
+.slider {
+  position: relative;
+  width: 46px;
+  height: 24px;
+  background-color: #d1d5db;
+  border-radius: 9999px;
+  transition: all 0.3s ease;
+  box-shadow: inset 0 0 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Moving circle */
+.slider::before {
+  content: "";
+  position: absolute;
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  top: 3px;
+  background-color: white;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+/* Toggle active (on) */
+.toggle-switch input:checked + .slider {
+  background-color: #3b82f6;
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+}
+.toggle-switch input:checked + .slider::before {
+  transform: translateX(22px);
+}
+
+/* Label text */
+.toggle-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+  min-width: 30px;
+  text-align: left;
+}
+
+/* 🌙 Dark mode support */
+body.dark .slider {
+  background-color: #475569;
+}
+body.dark .toggle-switch input:checked + .slider {
+  background-color: #60a5fa;
+  box-shadow: 0 0 10px rgba(147, 197, 253, 0.6);
+}
+body.dark .toggle-label {
+  color: #e2e8f0;
 }
