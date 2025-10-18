@@ -19,12 +19,20 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
-/* ----------------- Component ----------------- */
+/* ----------------- Types ----------------- */
+export interface User {
+  name: string;
+  email: string;
+  password?: string;
+}
+
+/* ----------------- Component Props ----------------- */
 interface AuthPageProps {
   theme: "light" | "dark";
   onAuth: (user: User) => void;
-  savedUser: User | null;
+  savedUser?: User | null;   // ✅ optional (fixes your TS2322 error)
 }
+
 
 type Step = "login" | "signup" | "verify";
 
