@@ -53,14 +53,15 @@ export default function AuthPage({ theme, onAuth, savedUser }: AuthPageProps) {
     [isDark]
   );
 
-  /* ----------------- State ----------------- */
-  const [step, setStep] = useState<Step>("login");
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [otp, setOtp] = useState("");
-  const [sentOtp, setSentOtp] = useState("");
-  const [loading, setLoading] = useState(false);
+ /* ----------------- State ----------------- */
+const [step, setStep] = useState<Step>("login");
+const [name, setName] = useState(savedUser?.name || "");
+const [email, setEmail] = useState(savedUser?.email || "");
+const [password, setPassword] = useState(savedUser?.password || "");
+const [otp, setOtp] = useState("");
+const [sentOtp, setSentOtp] = useState("");
+const [loading, setLoading] = useState(false);
+
 
   /* ----------------- Helpers ----------------- */
   const inputStyle: React.CSSProperties = {
